@@ -16,6 +16,7 @@
 - Financial command handlers for participant transfers and transaction corrections with idempotency, version checks, host authorization, and immutable ledger persistence.
 - Integration tests for transfer/correction command paths including replay, stale-version rejection, and duplicate-correction protection.
 - Authorized ledger read endpoint with cursor-style pagination over persisted immutable transactions/postings.
+- Authorized session export endpoint returning snapshot plus full immutable ledger history.
 
 ### Still pending in immediate roadmap
 

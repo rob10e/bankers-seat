@@ -12,6 +12,7 @@ Implemented in scaffold:
 - `POST /api/v1/sessions/{sessionId}/transfer`
 - `POST /api/v1/sessions/{sessionId}/corrections`
 - `GET /api/v1/sessions/{sessionId}/ledger`
+- `GET /api/v1/sessions/{sessionId}/export`
 - SignalR hub path `/hubs/game` with `SubscribeSession` and `RequestResync`
 
 Planned but not implemented yet:
@@ -19,7 +20,6 @@ Planned but not implemented yet:
 - Detailed template endpoint by version
 - Template asset serving endpoint
 - Admin template rescan endpoint
-- Session export endpoint
 - Full command/event hub surface listed below
 
 ## API conventions

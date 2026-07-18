@@ -223,6 +223,20 @@ public sealed class InMemorySessionService : ISessionService
         throw new InvalidOperationException("not-supported");
     }
 
+    public Task<SessionExportResponse> GetAuthorizedSessionExportAsync(
+        Guid sessionId,
+        Guid participantId,
+        string reconnectCredential,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = sessionId;
+        _ = participantId;
+        _ = reconnectCredential;
+        _ = cancellationToken;
+        throw new InvalidOperationException("not-supported");
+    }
+
     public Task<MoneyCommandResponse> TransferBetweenParticipantsAsync(
         Guid sessionId,
         Guid actorParticipantId,

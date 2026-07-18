@@ -223,19 +223,12 @@ public sealed class SqliteSessionService : ISessionService
         CancellationToken cancellationToken
     )
     {
-        var participant = await dbContext.Participants.SingleOrDefaultAsync(
-            record => record.Id == participantId && record.SessionId == sessionId,
+        await AuthorizeParticipantReadAsync(
+            sessionId,
+            participantId,
+            reconnectCredential,
             cancellationToken
         );
-        if (participant is null)
-        {
-            throw new InvalidOperationException("unauthorized-command");
-        }
-
-        if (!string.Equals(HashSecret(reconnectCredential), participant.ReconnectSecretHash, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("unauthorized-command");
-        }
 
         return await BuildSnapshotAsync(sessionId, cancellationToken);
     }
@@ -254,19 +247,12 @@ public sealed class SqliteSessionService : ISessionService
             throw new InvalidOperationException("invalid-request");
         }
 
-        var participant = await dbContext.Participants.SingleOrDefaultAsync(
-            record => record.Id == participantId && record.SessionId == sessionId,
+        await AuthorizeParticipantReadAsync(
+            sessionId,
+            participantId,
+            reconnectCredential,
             cancellationToken
         );
-        if (participant is null)
-        {
-            throw new InvalidOperationException("unauthorized-command");
-        }
-
-        if (!string.Equals(HashSecret(reconnectCredential), participant.ReconnectSecretHash, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("unauthorized-command");
-        }
 
         var query = dbContext.LedgerTransactions
             .Where(record => record.SessionId == sessionId)
@@ -299,6 +285,44 @@ public sealed class SqliteSessionService : ISessionService
             : null;
 
         return new SessionLedgerResponse(transactions, nextBeforeSequence);
+    }
+
+    public async Task<SessionExportResponse> GetAuthorizedSessionExportAsync(
+        Guid sessionId,
+        Guid participantId,
+        string reconnectCredential,
+        CancellationToken cancellationToken
+    )
+    {
+        await AuthorizeParticipantReadAsync(
+            sessionId,
+            participantId,
+            reconnectCredential,
+            cancellationToken
+        );
+
+        var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        var transactions = await dbContext.LedgerTransactions
+            .Where(record => record.SessionId == sessionId)
+            .OrderBy(record => record.Sequence)
+            .ToListAsync(cancellationToken);
+        var transactionIds = transactions.Select(record => record.Id).ToHashSet();
+        var postings = await dbContext.LedgerPostings
+            .Where(record => record.SessionId == sessionId && transactionIds.Contains(record.TransactionId))
+            .OrderBy(record => record.TransactionId)
+            .ThenBy(record => record.Id)
+            .ToListAsync(cancellationToken);
+        var postingsByTransaction = postings
+            .GroupBy(record => record.TransactionId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+        var payload = transactions.Select(record =>
+            ToLedgerTransactionResponse(
+                record,
+                postingsByTransaction.TryGetValue(record.Id, out var grouped) ? grouped : []
+            )
+        ).ToList();
+
+        return new SessionExportResponse(snapshot, payload, DateTimeOffset.UtcNow);
     }
 
     public async Task<MoneyCommandResponse> TransferBetweenParticipantsAsync(
@@ -610,6 +634,28 @@ public sealed class SqliteSessionService : ISessionService
         }
 
         return (session, actor);
+    }
+
+    private async Task AuthorizeParticipantReadAsync(
+        Guid sessionId,
+        Guid participantId,
+        string reconnectCredential,
+        CancellationToken cancellationToken
+    )
+    {
+        var participant = await dbContext.Participants.SingleOrDefaultAsync(
+            record => record.Id == participantId && record.SessionId == sessionId,
+            cancellationToken
+        );
+        if (participant is null)
+        {
+            throw new InvalidOperationException("unauthorized-command");
+        }
+
+        if (!string.Equals(HashSecret(reconnectCredential), participant.ReconnectSecretHash, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("unauthorized-command");
+        }
     }
 
     private async Task<IdempotencyRecordEntity?> TryLoadIdempotencyRecordAsync<TRequest>(

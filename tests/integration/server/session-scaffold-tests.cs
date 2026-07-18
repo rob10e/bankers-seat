@@ -643,4 +643,103 @@ public sealed class SessionScaffoldTests
 
             Assert.Equal("unauthorized-command", exception.Message);
         }
+
+        [Fact]
+        public async Task GetAuthorizedSessionExportReturnsSnapshotAndFullLedgerHistory()
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, catalogService);
+            var created = await sessionService.CreateSessionAsync(
+                new CreateSessionRequest(
+                    "generic-property-trading",
+                    "standard-edition",
+                    "1.0.0",
+                    "Host",
+                    new Dictionary<string, System.Text.Json.JsonElement>()
+                ),
+                CancellationToken.None
+            );
+            var joined = await sessionService.JoinSessionAsync(
+                new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                CancellationToken.None
+            );
+            var transfer = await sessionService.TransferBetweenParticipantsAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                new TransferBetweenParticipantsRequest(
+                    created.HostParticipantId,
+                    joined.ParticipantId,
+                    100,
+                    ExpectedSessionVersion: 2,
+                    IdempotencyKey: "export-a",
+                    Note: "First"
+                ),
+                CancellationToken.None
+            );
+            var correction = await sessionService.CorrectTransactionAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                new CorrectTransactionRequest(
+                    transfer.Transaction.TransactionId,
+                    ExpectedSessionVersion: 3,
+                    IdempotencyKey: "export-b",
+                    Reason: "Fix"
+                ),
+                CancellationToken.None
+            );
+
+            var export = await sessionService.GetAuthorizedSessionExportAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                CancellationToken.None
+            );
+
+            Assert.Equal(created.SessionId, export.Snapshot.SessionId);
+            Assert.Equal(2, export.Transactions.Count);
+            Assert.Equal(transfer.Transaction.TransactionId, export.Transactions[0].TransactionId);
+            Assert.Equal(correction.Transaction.TransactionId, export.Transactions[1].TransactionId);
+        }
+
+        [Fact]
+        public async Task GetAuthorizedSessionExportRejectsUnauthorizedParticipant()
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, catalogService);
+            var created = await sessionService.CreateSessionAsync(
+                new CreateSessionRequest(
+                    "generic-property-trading",
+                    "standard-edition",
+                    "1.0.0",
+                    "Host",
+                    new Dictionary<string, System.Text.Json.JsonElement>()
+                ),
+                CancellationToken.None
+            );
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                sessionService.GetAuthorizedSessionExportAsync(
+                    created.SessionId,
+                    Guid.NewGuid(),
+                    created.ReconnectCredential,
+                    CancellationToken.None
+                )
+            );
+
+            Assert.Equal("unauthorized-command", exception.Message);
+        }
 }

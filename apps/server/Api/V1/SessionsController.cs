@@ -233,6 +233,42 @@ public sealed class SessionsController : ControllerBase
         }
     }
 
+    [HttpGet("{sessionId:guid}/export")]
+    [ProducesResponseType<SessionExportResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SessionExportResponse>> GetSessionExport(
+        [FromRoute] Guid sessionId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Export requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.GetAuthorizedSessionExportAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
     private ActionResult ToProblemDetails(InvalidOperationException exception)
     {
         var code = exception.Message;

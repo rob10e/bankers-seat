@@ -36,6 +36,13 @@ public interface ISessionService
         CancellationToken cancellationToken
     );
 
+    Task<SessionExportResponse> GetAuthorizedSessionExportAsync(
+        Guid sessionId,
+        Guid participantId,
+        string reconnectCredential,
+        CancellationToken cancellationToken
+    );
+
     Task<MoneyCommandResponse> TransferBetweenParticipantsAsync(
         Guid sessionId,
         Guid actorParticipantId,

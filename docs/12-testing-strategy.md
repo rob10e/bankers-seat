@@ -8,6 +8,7 @@
 - Integration tests for template catalog discovery, session snapshot persistence, and active-session snapshot stability after source template edits (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for transfer/correction command handlers covering success, stale session version, insufficient funds, unauthorized actor, idempotent replay, duplicate idempotency key mismatch, and duplicate correction rejection (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for authorized ledger retrieval with newest-first pagination and unauthorized access rejection (`tests/integration/server/session-scaffold-tests.cs`).
+- Integration tests for authorized session export retrieval and unauthorized export rejection (`tests/integration/server/session-scaffold-tests.cs`).
 - Template schema and semantic validation CLI via `pnpm templates:validate`.
 
 ## Quality objectives
