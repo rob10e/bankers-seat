@@ -1,5 +1,8 @@
 # Banker's Seat
 
+[![CI](https://github.com/rob10e/bankers-seat/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rob10e/bankers-seat/actions/workflows/ci.yml)
+[![GitHub](https://img.shields.io/badge/GitHub-rob10e%2Fbankers--seat-181717?logo=github)](https://github.com/rob10e/bankers-seat)
+
 Banker's Seat is a browser-first companion app that acts as the banker and shared record keeper for tabletop games. Several players join a live game session from their own devices, while a host creates the session from a JSON-defined game template.
 
 The product is designed for games that use money, periodic payments, player-owned assets, life-state attributes, or other values that are traditionally tracked with paper money, tokens, cards, or handwritten notes.
@@ -74,7 +77,7 @@ bankers-seat/
 - Dark mode is implemented via persisted app settings.
 - Host and join forms call live backend endpoints and navigate to a session workspace.
 - Session workspace polls authorized snapshots from the server.
-- Server provides `/api/v1/templates`, `/api/v1/sessions`, `/api/v1/sessions/join`, `/api/v1/sessions/{sessionId}/reconnect`, `/api/v1/sessions/{sessionId}/snapshot`, `/api/v1/sessions/{sessionId}/transfer`, `/api/v1/sessions/{sessionId}/bank-payments`, `/api/v1/sessions/{sessionId}/bank-collections`, `/api/v1/sessions/{sessionId}/actions/{actionId}/execute`, `/api/v1/sessions/{sessionId}/corrections`, `/api/v1/sessions/{sessionId}/ledger`, and `/api/v1/sessions/{sessionId}/export`.
+- Server provides `/api/v1/templates`, `/api/v1/templates/{templateId}/editions/{editionId}/versions/{templateVersion}`, `/api/v1/sessions`, `/api/v1/sessions/join`, `/api/v1/sessions/{sessionId}/reconnect`, `/api/v1/sessions/{sessionId}/snapshot`, `/api/v1/sessions/{sessionId}/transfer`, `/api/v1/sessions/{sessionId}/bank-payments`, `/api/v1/sessions/{sessionId}/bank-collections`, `/api/v1/sessions/{sessionId}/actions/{actionId}/execute`, `/api/v1/sessions/{sessionId}/corrections`, `/api/v1/sessions/{sessionId}/ledger`, and `/api/v1/sessions/{sessionId}/export`.
 - SignalR hub is scaffolded at `/hubs/game` with session subscribe and resync methods.
 - Template validation CLI is implemented and available as `pnpm templates:validate`.
 - SQLite persistence baseline is implemented with EF Core, checked-in migrations, and transactional session/participant/account/template snapshot storage.

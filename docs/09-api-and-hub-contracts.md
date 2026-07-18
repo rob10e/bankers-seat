@@ -5,6 +5,7 @@
 Implemented in scaffold:
 
 - `GET /api/v1/templates`
+- `GET /api/v1/templates/{templateId}/editions/{editionId}/versions/{templateVersion}`
 - `POST /api/v1/sessions`
 - `POST /api/v1/sessions/join`
 - `POST /api/v1/sessions/{sessionId}/reconnect`
@@ -20,7 +21,6 @@ Implemented in scaffold:
 
 Planned but not implemented yet:
 
-- Detailed template endpoint by version
 - Template asset serving endpoint
 - Admin template rescan endpoint
 - Full command/event hub surface listed below
