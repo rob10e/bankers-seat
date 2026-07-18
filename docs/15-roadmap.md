@@ -1,6 +1,6 @@
 # Roadmap
 
-## Current delivery status (2026-07-17)
+## Current delivery status (2026-07-18)
 
 ### Completed now
 
@@ -13,10 +13,12 @@
 - Template validation test suite and integration coverage for active-session template snapshot immutability.
 - Domain money and correction invariant tests for balanced postings, overdraft behavior, duplicate correction protection, and atomic failure handling.
 - GitHub Actions CI workflow enforcing template validation, workspace lint/typecheck/tests, and .NET build/integration tests.
+- Financial command handlers for participant transfers and transaction corrections with idempotency, version checks, host authorization, and immutable ledger persistence.
+- Integration tests for transfer/correction command paths including replay, stale-version rejection, and duplicate-correction protection.
 
 ### Still pending in immediate roadmap
 
-- Domain command handlers for financial mutations and immutable ledger flows.
+- Additional financial command handlers beyond transfer/correction (bank payments, collections, template action execution).
 
 ## Phase 0 — Foundation and validation
 

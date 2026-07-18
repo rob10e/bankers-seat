@@ -26,4 +26,20 @@ public interface ISessionService
         string reconnectCredential,
         CancellationToken cancellationToken
     );
+
+    Task<MoneyCommandResponse> TransferBetweenParticipantsAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        TransferBetweenParticipantsRequest request,
+        CancellationToken cancellationToken
+    );
+
+    Task<MoneyCommandResponse> CorrectTransactionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        CorrectTransactionRequest request,
+        CancellationToken cancellationToken
+    );
 }

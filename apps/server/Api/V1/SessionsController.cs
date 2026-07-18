@@ -89,12 +89,7 @@ public sealed class SessionsController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        if (
-            !Request.Headers.TryGetValue(ParticipantIdHeader, out var participantIdRaw)
-            || !Guid.TryParse(participantIdRaw.SingleOrDefault(), out var participantId)
-            || !Request.Headers.TryGetValue(ReconnectCredentialHeader, out var reconnectCredentialRaw)
-            || string.IsNullOrWhiteSpace(reconnectCredentialRaw.SingleOrDefault())
-        )
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
         {
             return Problem(
                 statusCode: StatusCodes.Status400BadRequest,
@@ -104,7 +99,6 @@ public sealed class SessionsController : ControllerBase
             );
         }
 
-        var reconnectCredential = reconnectCredentialRaw.Single()!;
         try
         {
             var snapshot = await sessionService.GetAuthorizedSnapshotAsync(
@@ -121,6 +115,84 @@ public sealed class SessionsController : ControllerBase
         }
     }
 
+    [HttpPost("{sessionId:guid}/transfer")]
+    [ProducesResponseType<MoneyCommandResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MoneyCommandResponse>> TransferBetweenParticipants(
+        [FromRoute] Guid sessionId,
+        [FromBody] TransferBetweenParticipantsRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Mutating requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.TransferBetweenParticipantsAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                request,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
+    [HttpPost("{sessionId:guid}/corrections")]
+    [ProducesResponseType<MoneyCommandResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MoneyCommandResponse>> CorrectTransaction(
+        [FromRoute] Guid sessionId,
+        [FromBody] CorrectTransactionRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Mutating requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.CorrectTransactionAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                request,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
     private ActionResult ToProblemDetails(InvalidOperationException exception)
     {
         var code = exception.Message;
@@ -128,7 +200,12 @@ public sealed class SessionsController : ControllerBase
         {
             "template-not-found" => (StatusCodes.Status404NotFound, "Template not found."),
             "session-not-found" => (StatusCodes.Status404NotFound, "Session not found."),
+            "participant-not-found" => (StatusCodes.Status404NotFound, "Participant not found."),
+            "account-not-found" => (StatusCodes.Status404NotFound, "Account not found."),
+            "transaction-not-found" => (StatusCodes.Status404NotFound, "Transaction not found."),
             "unauthorized-command" => (StatusCodes.Status401Unauthorized, "Unauthorized command."),
+            "stale-session-version" => (StatusCodes.Status409Conflict, "Stale session version."),
+            "duplicate-idempotency-key" => (StatusCodes.Status409Conflict, "Duplicate idempotency key."),
             _ => (StatusCodes.Status400BadRequest, "Invalid request.")
         };
 
@@ -138,5 +215,23 @@ public sealed class SessionsController : ControllerBase
             detail: $"Request rejected with code '{code}'.",
             extensions: new Dictionary<string, object?> { ["code"] = code }
         );
+    }
+
+    private bool TryReadActorHeaders(out Guid participantId, out string reconnectCredential)
+    {
+        reconnectCredential = string.Empty;
+        participantId = Guid.Empty;
+        if (
+            !Request.Headers.TryGetValue(ParticipantIdHeader, out var participantIdRaw)
+            || !Guid.TryParse(participantIdRaw.SingleOrDefault(), out participantId)
+            || !Request.Headers.TryGetValue(ReconnectCredentialHeader, out var reconnectCredentialRaw)
+            || string.IsNullOrWhiteSpace(reconnectCredentialRaw.SingleOrDefault())
+        )
+        {
+            return false;
+        }
+
+        reconnectCredential = reconnectCredentialRaw.Single()!;
+        return true;
     }
 }

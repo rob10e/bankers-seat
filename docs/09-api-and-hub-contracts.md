@@ -1,6 +1,6 @@
 # API and Hub Contracts
 
-## Implementation status snapshot (2026-07-17)
+## Implementation status snapshot (2026-07-18)
 
 Implemented in scaffold:
 
@@ -9,6 +9,8 @@ Implemented in scaffold:
 - `POST /api/v1/sessions/join`
 - `POST /api/v1/sessions/{sessionId}/reconnect`
 - `GET /api/v1/sessions/{sessionId}/snapshot`
+- `POST /api/v1/sessions/{sessionId}/transfer`
+- `POST /api/v1/sessions/{sessionId}/corrections`
 - SignalR hub path `/hubs/game` with `SubscribeSession` and `RequestResync`
 
 Planned but not implemented yet:
@@ -101,6 +103,14 @@ Exchanges a valid reconnect credential for refreshed access.
 ### `GET /api/v1/sessions/{sessionId}/snapshot`
 
 Returns the authorized current session view.
+
+### `POST /api/v1/sessions/{sessionId}/transfer`
+
+Host-authorized transfer between participant accounts. Requires actor headers, expected session version, and idempotency key.
+
+### `POST /api/v1/sessions/{sessionId}/corrections`
+
+Host-authorized compensating correction of a prior ledger transaction. Requires actor headers, expected session version, idempotency key, and reason.
 
 ### `GET /api/v1/sessions/{sessionId}/ledger`
 

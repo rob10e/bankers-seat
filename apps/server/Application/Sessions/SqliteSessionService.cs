@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using BankersSeat.Server.Api.V1.Contracts;
+using BankersSeat.Server.Domain.Ledger;
 using BankersSeat.Server.Application.Templates;
 using BankersSeat.Server.Infrastructure.Persistence;
 using BankersSeat.Server.Infrastructure.Persistence.Entities;
@@ -238,6 +240,231 @@ public sealed class SqliteSessionService : ISessionService
         return await BuildSnapshotAsync(sessionId, cancellationToken);
     }
 
+    public async Task<MoneyCommandResponse> TransferBetweenParticipantsAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        TransferBetweenParticipantsRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        ValidateTransferRequest(request);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var (session, _) = await AuthorizeMutationAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            cancellationToken
+        );
+        var idempotency = await TryLoadIdempotencyRecordAsync(
+            sessionId,
+            actorParticipantId,
+            request.IdempotencyKey,
+            "transfer-between-participants",
+            request,
+            cancellationToken
+        );
+        if (idempotency is not null)
+        {
+            var replayResponse = await BuildReplayResponseAsync(sessionId, idempotency, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return replayResponse;
+        }
+
+        if (session.SessionVersion != request.ExpectedSessionVersion)
+        {
+            throw new InvalidOperationException("stale-session-version");
+        }
+
+        var fromAccount = await FindParticipantAccountAsync(
+            sessionId,
+            request.FromParticipantId,
+            cancellationToken
+        );
+        var toAccount = await FindParticipantAccountAsync(sessionId, request.ToParticipantId, cancellationToken);
+        var template = await dbContext.TemplateSnapshots.SingleAsync(
+            record => record.Id == session.TemplateSnapshotId,
+            cancellationToken
+        );
+        var nextSequence = await GetNextSequenceAsync(sessionId, cancellationToken);
+        var currentBalances = await dbContext.Accounts
+            .Where(record => record.SessionId == sessionId)
+            .ToDictionaryAsync(record => record.Id, record => record.Balance, cancellationToken);
+
+        MoneyMutationResult mutation;
+        try
+        {
+            mutation = MoneyMutationEngine.ApplyTransfer(
+                currentBalances,
+                sessionId,
+                actorParticipantId,
+                fromAccount.Id,
+                toAccount.Id,
+                request.Amount,
+                template.AllowPlayerOverdraft,
+                nextSequence,
+                DateTimeOffset.UtcNow,
+                string.IsNullOrWhiteSpace(request.Note) ? "Transfer" : request.Note.Trim()
+            );
+        }
+        catch (DomainRuleViolationException exception)
+        {
+            throw new InvalidOperationException(exception.Code);
+        }
+
+        await ApplyBalancesAsync(sessionId, mutation.UpdatedBalances, cancellationToken);
+        var transactionEntity = AddLedgerTransactionEntity(mutation.Transaction);
+        AddLedgerPostingEntities(sessionId, mutation.Transaction);
+
+        session.SessionVersion += 1;
+        var resultToken = transactionEntity.Id.ToString("N");
+        dbContext.IdempotencyRecords.Add(
+            CreateIdempotencyRecord(
+                sessionId,
+                actorParticipantId,
+                request.IdempotencyKey.Trim(),
+                "transfer-between-participants",
+                request,
+                resultToken
+            )
+        );
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        return new MoneyCommandResponse(
+            snapshot,
+            ToLedgerTransactionResponse(mutation.Transaction),
+            IdempotentReplay: false
+        );
+    }
+
+    public async Task<MoneyCommandResponse> CorrectTransactionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        CorrectTransactionRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        ValidateCorrectionRequest(request);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var (session, _) = await AuthorizeMutationAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            cancellationToken
+        );
+        var idempotency = await TryLoadIdempotencyRecordAsync(
+            sessionId,
+            actorParticipantId,
+            request.IdempotencyKey,
+            "correct-transaction",
+            request,
+            cancellationToken
+        );
+        if (idempotency is not null)
+        {
+            var replayResponse = await BuildReplayResponseAsync(sessionId, idempotency, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return replayResponse;
+        }
+
+        if (session.SessionVersion != request.ExpectedSessionVersion)
+        {
+            throw new InvalidOperationException("stale-session-version");
+        }
+
+        var original = await dbContext.LedgerTransactions.SingleOrDefaultAsync(
+            record => record.SessionId == sessionId && record.Id == request.TransactionId,
+            cancellationToken
+        );
+        if (original is null)
+        {
+            throw new InvalidOperationException("transaction-not-found");
+        }
+
+        var originalPostings = await dbContext.LedgerPostings
+            .Where(record => record.TransactionId == original.Id)
+            .OrderBy(record => record.Id)
+            .ToListAsync(cancellationToken);
+        if (originalPostings.Count == 0)
+        {
+            throw new InvalidOperationException("transaction-not-found");
+        }
+
+        var correctedIds = await dbContext.LedgerTransactions
+            .Where(record => record.SessionId == sessionId && record.CorrectsTransactionId != null)
+            .Select(record => record.CorrectsTransactionId!.Value)
+            .ToListAsync(cancellationToken);
+        var nextSequence = await GetNextSequenceAsync(sessionId, cancellationToken);
+        var currentBalances = await dbContext.Accounts
+            .Where(record => record.SessionId == sessionId)
+            .ToDictionaryAsync(record => record.Id, record => record.Balance, cancellationToken);
+        var originalDomain = new LedgerTransaction(
+            original.Id,
+            original.SessionId,
+            original.Sequence,
+            original.ActorParticipantId,
+            ParseLedgerKind(original.Kind),
+            original.CorrectsTransactionId,
+            original.Note,
+            original.CreatedAtUtc,
+            originalPostings
+                .Select(posting => new LedgerPosting(posting.AccountId, posting.Amount, posting.BalanceAfter))
+                .ToList()
+        );
+
+        MoneyMutationResult mutation;
+        try
+        {
+            mutation = MoneyMutationEngine.ApplyCorrection(
+                currentBalances,
+                sessionId,
+                actorParticipantId,
+                originalDomain,
+                correctedIds.ToHashSet(),
+                nextSequence,
+                DateTimeOffset.UtcNow,
+                request.Reason.Trim()
+            );
+        }
+        catch (DomainRuleViolationException exception)
+        {
+            throw new InvalidOperationException(exception.Code);
+        }
+
+        await ApplyBalancesAsync(sessionId, mutation.UpdatedBalances, cancellationToken);
+        var transactionEntity = AddLedgerTransactionEntity(mutation.Transaction);
+        AddLedgerPostingEntities(sessionId, mutation.Transaction);
+
+        session.SessionVersion += 1;
+        var resultToken = transactionEntity.Id.ToString("N");
+        dbContext.IdempotencyRecords.Add(
+            CreateIdempotencyRecord(
+                sessionId,
+                actorParticipantId,
+                request.IdempotencyKey.Trim(),
+                "correct-transaction",
+                request,
+                resultToken
+            )
+        );
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        return new MoneyCommandResponse(
+            snapshot,
+            ToLedgerTransactionResponse(mutation.Transaction),
+            IdempotentReplay: false
+        );
+    }
+
     private static void ValidateCreateRequest(CreateSessionRequest request)
     {
         if (
@@ -257,6 +484,302 @@ public sealed class SqliteSessionService : ISessionService
         {
             throw new InvalidOperationException("invalid-request");
         }
+    }
+
+    private static void ValidateTransferRequest(TransferBetweenParticipantsRequest request)
+    {
+        if (
+            request.FromParticipantId == Guid.Empty
+            || request.ToParticipantId == Guid.Empty
+            || request.ExpectedSessionVersion <= 0
+            || request.Amount <= 0
+            || string.IsNullOrWhiteSpace(request.IdempotencyKey)
+        )
+        {
+            throw new InvalidOperationException("invalid-request");
+        }
+    }
+
+    private static void ValidateCorrectionRequest(CorrectTransactionRequest request)
+    {
+        if (
+            request.TransactionId == Guid.Empty
+            || request.ExpectedSessionVersion <= 0
+            || string.IsNullOrWhiteSpace(request.IdempotencyKey)
+            || string.IsNullOrWhiteSpace(request.Reason)
+        )
+        {
+            throw new InvalidOperationException("invalid-request");
+        }
+    }
+
+    private async Task<(GameSessionEntity Session, ParticipantEntity Actor)> AuthorizeMutationAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        CancellationToken cancellationToken
+    )
+    {
+        var session = await dbContext.GameSessions.SingleOrDefaultAsync(
+            record => record.Id == sessionId,
+            cancellationToken
+        );
+        if (session is null)
+        {
+            throw new InvalidOperationException("session-not-found");
+        }
+
+        var actor = await dbContext.Participants.SingleOrDefaultAsync(
+            record => record.Id == actorParticipantId && record.SessionId == sessionId,
+            cancellationToken
+        );
+        if (actor is null)
+        {
+            throw new InvalidOperationException("unauthorized-command");
+        }
+
+        if (!string.Equals(HashSecret(reconnectCredential), actor.ReconnectSecretHash, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("unauthorized-command");
+        }
+
+        if (!string.Equals(actor.Role, "host", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("unauthorized-command");
+        }
+
+        return (session, actor);
+    }
+
+    private async Task<IdempotencyRecordEntity?> TryLoadIdempotencyRecordAsync<TRequest>(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string idempotencyKey,
+        string commandType,
+        TRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var normalizedKey = idempotencyKey.Trim();
+        var existing = await dbContext.IdempotencyRecords.SingleOrDefaultAsync(
+            record =>
+                record.SessionId == sessionId
+                && record.ActorParticipantId == actorParticipantId
+                && record.Key == normalizedKey,
+            cancellationToken
+        );
+        if (existing is null)
+        {
+            return null;
+        }
+
+        var requestHash = ComputeRequestHash(request);
+        if (
+            !string.Equals(existing.CommandType, commandType, StringComparison.Ordinal)
+            || !string.Equals(existing.RequestHash, requestHash, StringComparison.Ordinal)
+        )
+        {
+            throw new InvalidOperationException("duplicate-idempotency-key");
+        }
+
+        return existing;
+    }
+
+    private async Task<MoneyCommandResponse> BuildReplayResponseAsync(
+        Guid sessionId,
+        IdempotencyRecordEntity idempotency,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!Guid.TryParseExact(idempotency.ResultHash, "N", out var transactionId))
+        {
+            throw new InvalidOperationException("idempotency-result-missing");
+        }
+
+        var transactionEntity = await dbContext.LedgerTransactions.SingleOrDefaultAsync(
+            record => record.SessionId == sessionId && record.Id == transactionId,
+            cancellationToken
+        );
+        if (transactionEntity is null)
+        {
+            throw new InvalidOperationException("idempotency-result-missing");
+        }
+
+        var postings = await dbContext.LedgerPostings
+            .Where(record => record.TransactionId == transactionId)
+            .OrderBy(record => record.Id)
+            .ToListAsync(cancellationToken);
+        var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+
+        return new MoneyCommandResponse(
+            snapshot,
+            new LedgerTransactionViewResponse(
+                transactionEntity.Id,
+                transactionEntity.Sequence,
+                transactionEntity.Kind,
+                transactionEntity.ActorParticipantId,
+                transactionEntity.CorrectsTransactionId,
+                transactionEntity.Note,
+                transactionEntity.CreatedAtUtc,
+                postings.Select(posting => new LedgerPostingViewResponse(
+                    posting.AccountId,
+                    posting.Amount,
+                    posting.BalanceAfter
+                )).ToList()
+            ),
+            IdempotentReplay: true
+        );
+    }
+
+    private async Task<AccountEntity> FindParticipantAccountAsync(
+        Guid sessionId,
+        Guid participantId,
+        CancellationToken cancellationToken
+    )
+    {
+        var participantExists = await dbContext.Participants.AnyAsync(
+            record => record.SessionId == sessionId && record.Id == participantId,
+            cancellationToken
+        );
+        if (!participantExists)
+        {
+            throw new InvalidOperationException("participant-not-found");
+        }
+
+        var account = await dbContext.Accounts.SingleOrDefaultAsync(
+            record =>
+                record.SessionId == sessionId
+                && record.OwnerType == "participant"
+                && record.OwnerId == participantId,
+            cancellationToken
+        );
+        if (account is null)
+        {
+            throw new InvalidOperationException("account-not-found");
+        }
+
+        return account;
+    }
+
+    private async Task<long> GetNextSequenceAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var maxSequence = await dbContext.LedgerTransactions
+            .Where(record => record.SessionId == sessionId)
+            .Select(record => (long?)record.Sequence)
+            .MaxAsync(cancellationToken);
+        return (maxSequence ?? 0) + 1;
+    }
+
+    private async Task ApplyBalancesAsync(
+        Guid sessionId,
+        IReadOnlyDictionary<Guid, long> balances,
+        CancellationToken cancellationToken
+    )
+    {
+        var accounts = await dbContext.Accounts
+            .Where(record => record.SessionId == sessionId)
+            .ToListAsync(cancellationToken);
+        foreach (var account in accounts)
+        {
+            if (!balances.TryGetValue(account.Id, out var updatedBalance))
+            {
+                continue;
+            }
+
+            account.Balance = updatedBalance;
+            account.Version += 1;
+        }
+    }
+
+    private LedgerTransactionEntity AddLedgerTransactionEntity(LedgerTransaction transaction)
+    {
+        var entity = new LedgerTransactionEntity
+        {
+            Id = transaction.Id,
+            SessionId = transaction.SessionId,
+            Sequence = transaction.Sequence,
+            ActorParticipantId = transaction.ActorParticipantId,
+            Kind = transaction.Kind.ToString().ToLowerInvariant(),
+            CorrectsTransactionId = transaction.CorrectsTransactionId,
+            Note = transaction.Note,
+            CreatedAtUtc = transaction.CreatedAtUtc
+        };
+        dbContext.LedgerTransactions.Add(entity);
+        return entity;
+    }
+
+    private void AddLedgerPostingEntities(Guid sessionId, LedgerTransaction transaction)
+    {
+        foreach (var posting in transaction.Postings)
+        {
+            dbContext.LedgerPostings.Add(
+                new LedgerPostingEntity
+                {
+                    Id = Guid.NewGuid(),
+                    SessionId = sessionId,
+                    TransactionId = transaction.Id,
+                    AccountId = posting.AccountId,
+                    Amount = posting.Amount,
+                    BalanceAfter = posting.BalanceAfter
+                }
+            );
+        }
+    }
+
+    private static IdempotencyRecordEntity CreateIdempotencyRecord<TRequest>(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string idempotencyKey,
+        string commandType,
+        TRequest request,
+        string resultToken
+    )
+    {
+        return new IdempotencyRecordEntity
+        {
+            Id = Guid.NewGuid(),
+            SessionId = sessionId,
+            ActorParticipantId = actorParticipantId,
+            Key = idempotencyKey,
+            CommandType = commandType,
+            RequestHash = ComputeRequestHash(request),
+            ResultHash = resultToken,
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        };
+    }
+
+    private static string ComputeRequestHash<T>(T request)
+    {
+        var json = JsonSerializer.Serialize(request);
+        return HashSecret(json);
+    }
+
+    private static LedgerTransactionKind ParseLedgerKind(string kind)
+    {
+        return kind switch
+        {
+            "transfer" => LedgerTransactionKind.Transfer,
+            "correction" => LedgerTransactionKind.Correction,
+            _ => throw new InvalidOperationException("invalid-ledger-kind")
+        };
+    }
+
+    private static LedgerTransactionViewResponse ToLedgerTransactionResponse(LedgerTransaction transaction)
+    {
+        return new LedgerTransactionViewResponse(
+            transaction.Id,
+            transaction.Sequence,
+            transaction.Kind.ToString().ToLowerInvariant(),
+            transaction.ActorParticipantId,
+            transaction.CorrectsTransactionId,
+            transaction.Note,
+            transaction.CreatedAtUtc,
+            transaction.Postings.Select(posting => new LedgerPostingViewResponse(
+                posting.AccountId,
+                posting.Amount,
+                posting.BalanceAfter
+            )).ToList()
+        );
     }
 
     private async Task<string> GenerateUniqueRoomCodeAsync(CancellationToken cancellationToken)

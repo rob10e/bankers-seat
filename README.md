@@ -74,10 +74,11 @@ bankers-seat/
 - Dark mode is implemented via persisted app settings.
 - Host and join forms call live backend endpoints and navigate to a session workspace.
 - Session workspace polls authorized snapshots from the server.
-- Server provides `/api/v1/templates`, `/api/v1/sessions`, `/api/v1/sessions/join`, `/api/v1/sessions/{sessionId}/reconnect`, and `/api/v1/sessions/{sessionId}/snapshot`.
+- Server provides `/api/v1/templates`, `/api/v1/sessions`, `/api/v1/sessions/join`, `/api/v1/sessions/{sessionId}/reconnect`, `/api/v1/sessions/{sessionId}/snapshot`, `/api/v1/sessions/{sessionId}/transfer`, and `/api/v1/sessions/{sessionId}/corrections`.
 - SignalR hub is scaffolded at `/hubs/game` with session subscribe and resync methods.
 - Template validation CLI is implemented and available as `pnpm templates:validate`.
 - SQLite persistence baseline is implemented with EF Core, checked-in migrations, and transactional session/participant/account/template snapshot storage.
+- Financial transfer/correction command handling is implemented with session-version checks, idempotency, and immutable ledger transaction/posting persistence.
 - GitHub Actions CI workflow runs template validation, workspace lint/typecheck/tests, and .NET build/integration tests on pushes and pull requests.
 
 ## Planning document index

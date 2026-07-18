@@ -18,6 +18,10 @@ public sealed class BankersSeatDbContext : DbContext
 
     public DbSet<IdempotencyRecordEntity> IdempotencyRecords => Set<IdempotencyRecordEntity>();
 
+    public DbSet<LedgerTransactionEntity> LedgerTransactions => Set<LedgerTransactionEntity>();
+
+    public DbSet<LedgerPostingEntity> LedgerPostings => Set<LedgerPostingEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<GameSessionEntity>(entity =>
@@ -79,6 +83,25 @@ public sealed class BankersSeatDbContext : DbContext
             entity.Property(record => record.RequestHash).HasMaxLength(128).IsRequired();
             entity.Property(record => record.ResultHash).HasMaxLength(128).IsRequired();
             entity.HasIndex(record => new { record.SessionId, record.ActorParticipantId, record.Key }).IsUnique();
+        });
+
+        modelBuilder.Entity<LedgerTransactionEntity>(entity =>
+        {
+            entity.ToTable("ledger_transactions");
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.Kind).HasMaxLength(32).IsRequired();
+            entity.Property(record => record.Note).HasMaxLength(1000).IsRequired();
+            entity.HasIndex(record => new { record.SessionId, record.Sequence }).IsUnique();
+            entity.HasIndex(record => new { record.SessionId, record.CreatedAtUtc });
+            entity.HasIndex(record => new { record.SessionId, record.CorrectsTransactionId });
+        });
+
+        modelBuilder.Entity<LedgerPostingEntity>(entity =>
+        {
+            entity.ToTable("ledger_postings");
+            entity.HasKey(record => record.Id);
+            entity.HasIndex(record => new { record.TransactionId, record.Id });
+            entity.HasIndex(record => new { record.SessionId, record.AccountId });
         });
     }
 }

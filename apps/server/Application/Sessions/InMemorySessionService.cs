@@ -205,6 +205,38 @@ public sealed class InMemorySessionService : ISessionService
         return Task.FromResult(BuildSnapshot(session));
     }
 
+    public Task<MoneyCommandResponse> TransferBetweenParticipantsAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        TransferBetweenParticipantsRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = sessionId;
+        _ = actorParticipantId;
+        _ = reconnectCredential;
+        _ = request;
+        _ = cancellationToken;
+        throw new InvalidOperationException("not-supported");
+    }
+
+    public Task<MoneyCommandResponse> CorrectTransactionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        CorrectTransactionRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = sessionId;
+        _ = actorParticipantId;
+        _ = reconnectCredential;
+        _ = request;
+        _ = cancellationToken;
+        throw new InvalidOperationException("not-supported");
+    }
+
     private GameSession GetAuthorizedSession(Guid sessionId, Guid participantId, string reconnectCredential)
     {
         if (!sessionsById.TryGetValue(sessionId, out var state))
