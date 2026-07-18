@@ -901,7 +901,7 @@ public sealed class SessionScaffoldTests
                 var json = await File.ReadAllTextAsync(templatePath);
                 var updatedJson = json.Replace(
                     "\"type\": \"bank-to-player\"",
-                    "\"type\": \"adjust-player-balance\"",
+                    "\"type\": \"unsupported-op\"",
                     StringComparison.Ordinal
                 );
                 await File.WriteAllTextAsync(templatePath, updatedJson);
@@ -1052,6 +1052,105 @@ public sealed class SessionScaffoldTests
         }
 
         [Fact]
+        public async Task ExecuteTemplateActionSupportsAdjustPlayerBalanceOperation()
+        {
+            var tempTemplatesRoot = CreateTempTemplatesRoot();
+            var templatePath = Path.Combine(
+                tempTemplatesRoot,
+                "samples",
+                "generic-property-trading",
+                "template.json"
+            );
+
+            try
+            {
+                var json = await File.ReadAllTextAsync(templatePath);
+                var updatedJson = json
+                    .Replace(
+                        "\"type\": \"bank-to-player\"",
+                        "\"type\": \"adjust-player-balance\"",
+                        StringComparison.Ordinal
+                    )
+                    .Replace(
+                        "\"type\": \"player-to-bank\"",
+                        "\"type\": \"adjust-player-balance\"",
+                        StringComparison.Ordinal
+                    )
+                    .Replace("\"amount\": 50", "\"amount\": -50", StringComparison.Ordinal);
+                await File.WriteAllTextAsync(templatePath, updatedJson);
+
+                var isolatedCatalog = new FileTemplateCatalogService(tempTemplatesRoot);
+                await using var connection = new SqliteConnection("Data Source=:memory:");
+                await connection.OpenAsync();
+                var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                    .UseSqlite(connection)
+                    .Options;
+                await using var dbContext = new BankersSeatDbContext(dbOptions);
+                await dbContext.Database.MigrateAsync();
+                var sessionService = new SqliteSessionService(dbContext, isolatedCatalog);
+                var created = await sessionService.CreateSessionAsync(
+                    new CreateSessionRequest(
+                        "generic-property-trading",
+                        "standard-edition",
+                        "1.0.0",
+                        "Host",
+                        new Dictionary<string, System.Text.Json.JsonElement>()
+                    ),
+                    CancellationToken.None
+                );
+                var joined = await sessionService.JoinSessionAsync(
+                    new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                    CancellationToken.None
+                );
+
+                var income = await sessionService.ExecuteTemplateActionAsync(
+                    created.SessionId,
+                    created.HostParticipantId,
+                    created.ReconnectCredential,
+                    "standard-income",
+                    new ExecuteTemplateActionRequest(
+                        joined.ParticipantId,
+                        null,
+                        ExpectedSessionVersion: 2,
+                        IdempotencyKey: "adjust-1",
+                        Note: string.Empty
+                    ),
+                    CancellationToken.None
+                );
+                var fee = await sessionService.ExecuteTemplateActionAsync(
+                    created.SessionId,
+                    created.HostParticipantId,
+                    created.ReconnectCredential,
+                    "standard-fee",
+                    new ExecuteTemplateActionRequest(
+                        joined.ParticipantId,
+                        null,
+                        ExpectedSessionVersion: 3,
+                        IdempotencyKey: "adjust-2",
+                        Note: string.Empty
+                    ),
+                    CancellationToken.None
+                );
+
+                var playerAfterFee = fee.Snapshot.Accounts.Single(account =>
+                    account.OwnerId == joined.ParticipantId
+                );
+                var bankAfterFee = fee.Snapshot.Accounts.Single(account => account.OwnerType == "bank");
+                Assert.Equal(1650, playerAfterFee.Balance);
+                Assert.Equal(-150, bankAfterFee.Balance);
+                Assert.Equal("transfer", income.Transaction.Kind);
+                Assert.Equal("transfer", fee.Transaction.Kind);
+            }
+            finally
+            {
+                if (Directory.Exists(tempTemplatesRoot))
+                {
+                    Directory.Delete(tempTemplatesRoot, recursive: true);
+                }
+            }
+        }
+
+        [Fact]
         public async Task ExecuteTemplateActionAppliesCompositeOperationAtomically()
         {
             await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -1104,6 +1203,90 @@ public sealed class SessionScaffoldTests
             Assert.Equal("true", ownsHome.ValueJson);
             Assert.Equal("action", response.Transaction.Kind);
             Assert.Equal(2, response.Transaction.Postings.Count);
+        }
+
+        [Fact]
+        public async Task ExecuteTemplateActionSupportsAdjustPlayerBalanceInsideComposite()
+        {
+            var tempTemplatesRoot = CreateTempTemplatesRoot("generic-life-journey");
+            var templatePath = Path.Combine(
+                tempTemplatesRoot,
+                "samples",
+                "generic-life-journey",
+                "template.json"
+            );
+
+            try
+            {
+                var json = await File.ReadAllTextAsync(templatePath);
+                var updatedJson = json
+                    .Replace(
+                        "\"type\": \"player-to-bank\"",
+                        "\"type\": \"adjust-player-balance\"",
+                        StringComparison.Ordinal
+                    )
+                    .Replace("\"amount\": 50000", "\"amount\": -50000", StringComparison.Ordinal);
+                await File.WriteAllTextAsync(templatePath, updatedJson);
+
+                var isolatedCatalog = new FileTemplateCatalogService(tempTemplatesRoot);
+                await using var connection = new SqliteConnection("Data Source=:memory:");
+                await connection.OpenAsync();
+                var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                    .UseSqlite(connection)
+                    .Options;
+                await using var dbContext = new BankersSeatDbContext(dbOptions);
+                await dbContext.Database.MigrateAsync();
+                var sessionService = new SqliteSessionService(dbContext, isolatedCatalog);
+                var created = await sessionService.CreateSessionAsync(
+                    new CreateSessionRequest(
+                        "generic-life-journey",
+                        "family-edition",
+                        "1.0.0",
+                        "Host",
+                        new Dictionary<string, System.Text.Json.JsonElement>()
+                    ),
+                    CancellationToken.None
+                );
+                var joined = await sessionService.JoinSessionAsync(
+                    new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                    CancellationToken.None
+                );
+
+                var response = await sessionService.ExecuteTemplateActionAsync(
+                    created.SessionId,
+                    created.HostParticipantId,
+                    created.ReconnectCredential,
+                    "buy-home",
+                    new ExecuteTemplateActionRequest(
+                        joined.ParticipantId,
+                        null,
+                        ExpectedSessionVersion: 2,
+                        IdempotencyKey: "composite-adjust-1",
+                        Note: string.Empty
+                    ),
+                    CancellationToken.None
+                );
+
+                var joinedBalance = response.Snapshot.Accounts.Single(account =>
+                    account.OwnerId == joined.ParticipantId
+                );
+                var bankBalance = response.Snapshot.Accounts.Single(account => account.OwnerType == "bank");
+                var ownsHome = response.Snapshot.PlayerFieldValues.Single(value =>
+                    value.ParticipantId == joined.ParticipantId && value.FieldId == "owns-home"
+                );
+                Assert.Equal(-40000, joinedBalance.Balance);
+                Assert.Equal(50000, bankBalance.Balance);
+                Assert.Equal("true", ownsHome.ValueJson);
+                Assert.Equal("action", response.Transaction.Kind);
+                Assert.Equal(2, response.Transaction.Postings.Count);
+            }
+            finally
+            {
+                if (Directory.Exists(tempTemplatesRoot))
+                {
+                    Directory.Delete(tempTemplatesRoot, recursive: true);
+                }
+            }
         }
 
         [Fact]

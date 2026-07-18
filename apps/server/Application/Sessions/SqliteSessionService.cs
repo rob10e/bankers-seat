@@ -696,6 +696,7 @@ public sealed class SqliteSessionService : ISessionService
             action.OperationType is ActionOperationType.BankToPlayer
                 or ActionOperationType.PlayerToBank
                 or ActionOperationType.PlayerToPlayer
+                or ActionOperationType.AdjustPlayerBalance
         )
         {
             var currentBalances = await dbContext.Accounts
@@ -755,6 +756,7 @@ public sealed class SqliteSessionService : ISessionService
                     step.OperationType is ActionOperationType.BankToPlayer
                         or ActionOperationType.PlayerToBank
                         or ActionOperationType.PlayerToPlayer
+                        or ActionOperationType.AdjustPlayerBalance
                 )
                 {
                     var stepInstructions = await ResolveActionTransferInstructionsAsync(
@@ -1533,6 +1535,14 @@ public sealed class SqliteSessionService : ISessionService
                     operation.Clone(),
                     []
                 ),
+                "adjust-player-balance" => new ResolvedTemplateAction(
+                    ActionOperationType.AdjustPlayerBalance,
+                    ReadSignedAdjustAmount(operation),
+                    label,
+                    scope,
+                    operation.Clone(),
+                    []
+                ),
                 "composite" => new ResolvedTemplateAction(
                     ActionOperationType.Composite,
                     null,
@@ -1547,6 +1557,86 @@ public sealed class SqliteSessionService : ISessionService
 
         throw new InvalidOperationException("action-not-found");
     }
+
+    private async Task<IReadOnlyList<TransferInstruction>> ResolveAdjustBalanceInstructionsAsync(
+            Guid sessionId,
+            ResolvedTemplateAction action,
+            ExecuteTemplateActionRequest request,
+            BankPolicy policy,
+            CancellationToken cancellationToken
+        )
+        {
+            if (!action.Amount.HasValue || action.Amount.Value == long.MinValue)
+            {
+                throw new InvalidOperationException("invalid-template-snapshot");
+            }
+
+            var amount = action.Amount.Value;
+            var magnitude = amount > 0 ? amount : -amount;
+            var positiveAdjust = amount > 0;
+            var bankAccount = await FindBankAccountAsync(sessionId, cancellationToken);
+
+            if (string.Equals(action.Scope, "single-player", StringComparison.Ordinal))
+            {
+                if (!request.PrimaryParticipantId.HasValue || request.PrimaryParticipantId.Value == Guid.Empty)
+                {
+                    throw new InvalidOperationException("invalid-request");
+                }
+
+                var participantAccount = await FindParticipantAccountAsync(
+                    sessionId,
+                    request.PrimaryParticipantId.Value,
+                    cancellationToken
+                );
+                if (positiveAdjust)
+                {
+                    return [new TransferInstruction(
+                        bankAccount.Id,
+                        participantAccount.Id,
+                        magnitude,
+                        policy.IsUnlimitedBank
+                    )];
+                }
+
+                return [new TransferInstruction(
+                    participantAccount.Id,
+                    bankAccount.Id,
+                    magnitude,
+                    policy.AllowPlayerOverdraft
+                )];
+            }
+
+            if (!string.Equals(action.Scope, "all-players", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("unsupported-template-action");
+            }
+
+            var participantAccounts = await dbContext.Accounts
+                .Where(record => record.SessionId == sessionId && record.OwnerType == "participant")
+                .OrderBy(record => record.OwnerId)
+                .ToListAsync(cancellationToken);
+            if (participantAccounts.Count == 0)
+            {
+                throw new InvalidOperationException("invalid-request");
+            }
+
+            if (positiveAdjust)
+            {
+                return participantAccounts.Select(account => new TransferInstruction(
+                    bankAccount.Id,
+                    account.Id,
+                    magnitude,
+                    policy.IsUnlimitedBank
+                )).ToList();
+            }
+
+            return participantAccounts.Select(account => new TransferInstruction(
+                account.Id,
+                bankAccount.Id,
+                magnitude,
+                policy.AllowPlayerOverdraft
+            )).ToList();
+        }
 
     private static IReadOnlyList<ResolvedTemplateActionStep> ResolveCompositeSteps(JsonElement operation)
     {
@@ -1583,6 +1673,11 @@ public sealed class SqliteSessionService : ISessionService
                 "player-to-player" => new ResolvedTemplateActionStep(
                     ActionOperationType.PlayerToPlayer,
                     ReadActionAmount(step),
+                    step.Clone()
+                ),
+                "adjust-player-balance" => new ResolvedTemplateActionStep(
+                    ActionOperationType.AdjustPlayerBalance,
+                    ReadSignedAdjustAmount(step),
                     step.Clone()
                 ),
                 "set-field" => new ResolvedTemplateActionStep(
@@ -1622,6 +1717,21 @@ public sealed class SqliteSessionService : ISessionService
         return amount;
     }
 
+    private static long ReadSignedAdjustAmount(JsonElement operation)
+    {
+        if (
+            !operation.TryGetProperty("amount", out var amountProperty)
+            || amountProperty.ValueKind != JsonValueKind.Number
+            || !amountProperty.TryGetInt64(out var amount)
+            || amount == 0
+        )
+        {
+            throw new InvalidOperationException("invalid-template-snapshot");
+        }
+
+        return amount;
+    }
+
     private async Task<IReadOnlyList<TransferInstruction>> ResolveActionTransferInstructionsAsync(
         Guid sessionId,
         ResolvedTemplateAction action,
@@ -1630,6 +1740,17 @@ public sealed class SqliteSessionService : ISessionService
         CancellationToken cancellationToken
     )
     {
+        if (action.OperationType == ActionOperationType.AdjustPlayerBalance)
+        {
+            return await ResolveAdjustBalanceInstructionsAsync(
+                sessionId,
+                action,
+                request,
+                policy,
+                cancellationToken
+            );
+        }
+
         if (!action.Amount.HasValue)
         {
             throw new InvalidOperationException("invalid-template-snapshot");
@@ -2285,6 +2406,7 @@ public sealed class SqliteSessionService : ISessionService
         BankToPlayer,
         PlayerToBank,
         PlayerToPlayer,
+        AdjustPlayerBalance,
         SetField,
         IncrementField,
         Composite

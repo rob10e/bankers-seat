@@ -15,7 +15,7 @@
 - GitHub Actions CI workflow enforcing template validation, workspace lint/typecheck/tests, and .NET build/integration tests.
 - Financial command handlers for participant transfers and transaction corrections with idempotency, version checks, host authorization, and immutable ledger persistence.
 - Bank-payment and bank-collection command handlers with transactional balance updates and immutable ledger postings.
-- Template financial action execution handler for declarative `bank-to-player`, `player-to-bank`, and `player-to-player` operations with idempotency and immutable ledger postings.
+- Template financial action execution handler for declarative `bank-to-player`, `player-to-bank`, `player-to-player`, and `adjust-player-balance` operations with idempotency and immutable ledger postings.
 - Template field action execution support for `set-field` and `increment-field`, with persisted player field values in authorized snapshots.
 - Template composite action execution support for atomic multi-step actions combining supported financial and field operations.
 - Integration tests for transfer/correction command paths including replay, stale-version rejection, and duplicate-correction protection.
@@ -24,40 +24,40 @@
 
 ### Still pending in immediate roadmap
 
-- Additional template operation coverage beyond current support (`adjust-player-balance` and future declarative operation extensions).
+- Additional template operation coverage beyond current support (future declarative operation extensions).
 
 ## Phase 0 — Foundation and validation
 
 ### Outcomes
 
-- Repository scaffold.
-- Core documentation and ADRs.
-- JSON Schema.
-- Two generic sample templates.
-- CLI/template validation.
-- Domain model tests for money and corrections.
-- Basic CI.
+- ~~Repository scaffold.~~
+- ~~Core documentation and ADRs.~~
+- ~~JSON Schema.~~
+- ~~Two generic sample templates.~~
+- ~~CLI/template validation.~~
+- ~~Domain model tests for money and corrections.~~
+- ~~Basic CI.~~
 
 ### Exit criteria
 
-- All samples validate.
-- Domain invariants are tested.
-- Architecture boundaries are represented in the repository.
-- No UI framework dependency leaks into template contracts.
+- ~~All samples validate.~~
+- ~~Domain invariants are tested.~~
+- ~~Architecture boundaries are represented in the repository.~~
+- ~~No UI framework dependency leaks into template contracts.~~
 
 ## Phase 1 — Local single-device banker prototype
 
 ### Features
 
-- Template catalog.
-- Host creates a session.
-- Participant setup on one device.
-- Balances.
-- Bank payment, collection, and player transfer.
-- Custom fields.
-- Ledger.
-- Corrections.
-- SQLite persistence.
+- ~~Template catalog.~~
+- ~~Host creates a session.~~
+- ~~Participant setup on one device.~~
+- ~~Balances.~~
+- ~~Bank payment, collection, and player transfer.~~
+- ~~Custom fields.~~
+- ~~Ledger.~~
+- ~~Corrections.~~
+- ~~SQLite persistence.~~
 
 ### Purpose
 
@@ -67,15 +67,15 @@ Validate the template model and banker workflow before adding multiplayer comple
 
 ### Features
 
-- Room code and QR joining.
+- ~~Room code~~ and QR joining.
 - Multiple devices.
 - SignalR updates.
-- reconnect credentials.
-- lobby.
+- ~~reconnect credentials.~~
+- ~~lobby.~~
 - host/banker/player roles.
 - session lifecycle.
-- idempotency and versioning.
-- responsive phone UI.
+- ~~idempotency and versioning.~~
+- ~~responsive phone UI.~~
 - Playwright multiplayer flows.
 
 ### Exit criteria
