@@ -67,6 +67,15 @@ public interface ISessionService
         CancellationToken cancellationToken
     );
 
+    Task<MoneyCommandResponse> ExecuteTemplateActionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        string actionId,
+        ExecuteTemplateActionRequest request,
+        CancellationToken cancellationToken
+    );
+
     Task<MoneyCommandResponse> CorrectTransactionAsync(
         Guid sessionId,
         Guid actorParticipantId,

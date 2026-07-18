@@ -15,13 +15,14 @@
 - GitHub Actions CI workflow enforcing template validation, workspace lint/typecheck/tests, and .NET build/integration tests.
 - Financial command handlers for participant transfers and transaction corrections with idempotency, version checks, host authorization, and immutable ledger persistence.
 - Bank-payment and bank-collection command handlers with transactional balance updates and immutable ledger postings.
+- Template financial action execution handler for declarative `bank-to-player`, `player-to-bank`, and `player-to-player` operations with idempotency and immutable ledger postings.
 - Integration tests for transfer/correction command paths including replay, stale-version rejection, and duplicate-correction protection.
 - Authorized ledger read endpoint with cursor-style pagination over persisted immutable transactions/postings.
 - Authorized session export endpoint returning snapshot plus full immutable ledger history.
 
 ### Still pending in immediate roadmap
 
-- Additional financial command handlers beyond current coverage (template action execution).
+- Full template action execution coverage beyond financial operations (field updates, composite/multi-step actions, and all-player scopes).
 
 ## Phase 0 — Foundation and validation
 

@@ -625,6 +625,173 @@ public sealed class SqliteSessionService : ISessionService
         );
     }
 
+    public async Task<MoneyCommandResponse> ExecuteTemplateActionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        string actionId,
+        ExecuteTemplateActionRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        ValidateExecuteTemplateActionRequest(actionId, request);
+        var normalizedActionId = actionId.Trim();
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var (session, _) = await AuthorizeMutationAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            cancellationToken
+        );
+        var idempotency = await TryLoadIdempotencyRecordAsync(
+            sessionId,
+            actorParticipantId,
+            request.IdempotencyKey,
+            "execute-template-action",
+            new { ActionId = normalizedActionId, Request = request },
+            cancellationToken
+        );
+        if (idempotency is not null)
+        {
+            var replayResponse = await BuildReplayResponseAsync(sessionId, idempotency, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return replayResponse;
+        }
+
+        if (session.SessionVersion != request.ExpectedSessionVersion)
+        {
+            throw new InvalidOperationException("stale-session-version");
+        }
+
+        var snapshot = await dbContext.TemplateSnapshots.SingleAsync(
+            record => record.Id == session.TemplateSnapshotId,
+            cancellationToken
+        );
+        var action = ResolveFinancialAction(snapshot.TemplateJson, normalizedActionId);
+        if (!string.Equals(action.Scope, "single-player", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("unsupported-template-action");
+        }
+
+        var policy = ParseBankPolicy(snapshot.TemplateJson, snapshot.AllowPlayerOverdraft);
+        var currentBalances = await dbContext.Accounts
+            .Where(record => record.SessionId == sessionId)
+            .ToDictionaryAsync(record => record.Id, record => record.Balance, cancellationToken);
+        var nextSequence = await GetNextSequenceAsync(sessionId, cancellationToken);
+        var note = string.IsNullOrWhiteSpace(request.Note)
+            ? $"Action: {action.Label}"
+            : request.Note.Trim();
+
+        AccountEntity fromAccount;
+        AccountEntity toAccount;
+        bool allowFromOverdraft;
+        switch (action.OperationType)
+        {
+            case FinancialActionOperationType.BankToPlayer:
+                if (!request.PrimaryParticipantId.HasValue || request.PrimaryParticipantId.Value == Guid.Empty)
+                {
+                    throw new InvalidOperationException("invalid-request");
+                }
+
+                fromAccount = await FindBankAccountAsync(sessionId, cancellationToken);
+                toAccount = await FindParticipantAccountAsync(
+                    sessionId,
+                    request.PrimaryParticipantId.Value,
+                    cancellationToken
+                );
+                allowFromOverdraft = policy.IsUnlimitedBank;
+                break;
+            case FinancialActionOperationType.PlayerToBank:
+                if (!request.PrimaryParticipantId.HasValue || request.PrimaryParticipantId.Value == Guid.Empty)
+                {
+                    throw new InvalidOperationException("invalid-request");
+                }
+
+                fromAccount = await FindParticipantAccountAsync(
+                    sessionId,
+                    request.PrimaryParticipantId.Value,
+                    cancellationToken
+                );
+                toAccount = await FindBankAccountAsync(sessionId, cancellationToken);
+                allowFromOverdraft = policy.AllowPlayerOverdraft;
+                break;
+            case FinancialActionOperationType.PlayerToPlayer:
+                if (
+                    !request.PrimaryParticipantId.HasValue
+                    || request.PrimaryParticipantId.Value == Guid.Empty
+                    || !request.SecondaryParticipantId.HasValue
+                    || request.SecondaryParticipantId.Value == Guid.Empty
+                )
+                {
+                    throw new InvalidOperationException("invalid-request");
+                }
+
+                fromAccount = await FindParticipantAccountAsync(
+                    sessionId,
+                    request.PrimaryParticipantId.Value,
+                    cancellationToken
+                );
+                toAccount = await FindParticipantAccountAsync(
+                    sessionId,
+                    request.SecondaryParticipantId.Value,
+                    cancellationToken
+                );
+                allowFromOverdraft = policy.AllowPlayerOverdraft;
+                break;
+            default:
+                throw new InvalidOperationException("unsupported-template-action");
+        }
+
+        MoneyMutationResult mutation;
+        try
+        {
+            mutation = MoneyMutationEngine.ApplyTransfer(
+                currentBalances,
+                sessionId,
+                actorParticipantId,
+                fromAccount.Id,
+                toAccount.Id,
+                action.Amount,
+                allowFromOverdraft,
+                nextSequence,
+                DateTimeOffset.UtcNow,
+                note
+            );
+        }
+        catch (DomainRuleViolationException exception)
+        {
+            throw new InvalidOperationException(exception.Code);
+        }
+
+        await ApplyBalancesAsync(sessionId, mutation.UpdatedBalances, cancellationToken);
+        var transactionEntity = AddLedgerTransactionEntity(mutation.Transaction);
+        AddLedgerPostingEntities(sessionId, mutation.Transaction);
+
+        session.SessionVersion += 1;
+        var resultToken = transactionEntity.Id.ToString("N");
+        dbContext.IdempotencyRecords.Add(
+            CreateIdempotencyRecord(
+                sessionId,
+                actorParticipantId,
+                request.IdempotencyKey.Trim(),
+                "execute-template-action",
+                new { ActionId = normalizedActionId, Request = request },
+                resultToken
+            )
+        );
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var updatedSnapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        return new MoneyCommandResponse(
+            updatedSnapshot,
+            ToLedgerTransactionResponse(mutation.Transaction),
+            IdempotentReplay: false
+        );
+    }
+
     public async Task<MoneyCommandResponse> CorrectTransactionAsync(
         Guid sessionId,
         Guid actorParticipantId,
@@ -816,6 +983,21 @@ public sealed class SqliteSessionService : ISessionService
             request.FromParticipantId == Guid.Empty
             || request.ExpectedSessionVersion <= 0
             || request.Amount <= 0
+            || string.IsNullOrWhiteSpace(request.IdempotencyKey)
+        )
+        {
+            throw new InvalidOperationException("invalid-request");
+        }
+    }
+
+    private static void ValidateExecuteTemplateActionRequest(
+        string actionId,
+        ExecuteTemplateActionRequest request
+    )
+    {
+        if (
+            string.IsNullOrWhiteSpace(actionId)
+            || request.ExpectedSessionVersion <= 0
             || string.IsNullOrWhiteSpace(request.IdempotencyKey)
         )
         {
@@ -1048,6 +1230,85 @@ public sealed class SqliteSessionService : ISessionService
         }
 
         return new BankPolicy(isUnlimited, allowPlayerOverdraft, startingBankBalance);
+    }
+
+    private static ResolvedFinancialAction ResolveFinancialAction(string templateJson, string actionId)
+    {
+        using var document = JsonDocument.Parse(templateJson);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("actions", out var actions) || actions.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException("action-not-found");
+        }
+
+        foreach (var action in actions.EnumerateArray())
+        {
+            if (
+                !action.TryGetProperty("id", out var actionIdProperty)
+                || actionIdProperty.ValueKind != JsonValueKind.String
+                || !string.Equals(actionIdProperty.GetString(), actionId, StringComparison.Ordinal)
+            )
+            {
+                continue;
+            }
+
+            if (
+                !action.TryGetProperty("label", out var labelProperty)
+                || labelProperty.ValueKind != JsonValueKind.String
+                || !action.TryGetProperty("scope", out var scopeProperty)
+                || scopeProperty.ValueKind != JsonValueKind.String
+                || !action.TryGetProperty("operation", out var operation)
+                || operation.ValueKind != JsonValueKind.Object
+                || !operation.TryGetProperty("type", out var typeProperty)
+                || typeProperty.ValueKind != JsonValueKind.String
+            )
+            {
+                throw new InvalidOperationException("invalid-template-snapshot");
+            }
+
+            var operationType = typeProperty.GetString();
+            var label = labelProperty.GetString()!;
+            var scope = scopeProperty.GetString()!;
+            return operationType switch
+            {
+                "bank-to-player" => new ResolvedFinancialAction(
+                    FinancialActionOperationType.BankToPlayer,
+                    ReadActionAmount(operation),
+                    label,
+                    scope
+                ),
+                "player-to-bank" => new ResolvedFinancialAction(
+                    FinancialActionOperationType.PlayerToBank,
+                    ReadActionAmount(operation),
+                    label,
+                    scope
+                ),
+                "player-to-player" => new ResolvedFinancialAction(
+                    FinancialActionOperationType.PlayerToPlayer,
+                    ReadActionAmount(operation),
+                    label,
+                    scope
+                ),
+                _ => throw new InvalidOperationException("unsupported-template-action")
+            };
+        }
+
+        throw new InvalidOperationException("action-not-found");
+    }
+
+    private static long ReadActionAmount(JsonElement operation)
+    {
+        if (
+            !operation.TryGetProperty("amount", out var amountProperty)
+            || amountProperty.ValueKind != JsonValueKind.Number
+            || !amountProperty.TryGetInt64(out var amount)
+            || amount <= 0
+        )
+        {
+            throw new InvalidOperationException("invalid-template-snapshot");
+        }
+
+        return amount;
     }
 
     private async Task<long> GetNextSequenceAsync(Guid sessionId, CancellationToken cancellationToken)
@@ -1294,4 +1555,18 @@ public sealed class SqliteSessionService : ISessionService
         bool AllowPlayerOverdraft,
         long StartingBankBalance
     );
+
+    private sealed record ResolvedFinancialAction(
+        FinancialActionOperationType OperationType,
+        long Amount,
+        string Label,
+        string Scope
+    );
+
+    private enum FinancialActionOperationType
+    {
+        BankToPlayer,
+        PlayerToBank,
+        PlayerToPlayer
+    }
 }

@@ -232,6 +232,47 @@ public sealed class SessionsController : ControllerBase
         }
     }
 
+    [HttpPost("{sessionId:guid}/actions/{actionId}/execute")]
+    [ProducesResponseType<MoneyCommandResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MoneyCommandResponse>> ExecuteTemplateAction(
+        [FromRoute] Guid sessionId,
+        [FromRoute] string actionId,
+        [FromBody] ExecuteTemplateActionRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Mutating requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.ExecuteTemplateActionAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                actionId,
+                request,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
     [HttpPost("{sessionId:guid}/corrections")]
     [ProducesResponseType<MoneyCommandResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -355,6 +396,7 @@ public sealed class SessionsController : ControllerBase
             "template-not-found" => (StatusCodes.Status404NotFound, "Template not found."),
             "session-not-found" => (StatusCodes.Status404NotFound, "Session not found."),
             "participant-not-found" => (StatusCodes.Status404NotFound, "Participant not found."),
+            "action-not-found" => (StatusCodes.Status404NotFound, "Action not found."),
             "account-not-found" => (StatusCodes.Status404NotFound, "Account not found."),
             "transaction-not-found" => (StatusCodes.Status404NotFound, "Transaction not found."),
             "unauthorized-command" => (StatusCodes.Status401Unauthorized, "Unauthorized command."),

@@ -813,4 +813,121 @@ public sealed class SessionScaffoldTests
             Assert.Equal(1400, playerAfterCollection.Balance);
             Assert.Equal(100, bankAfterCollection.Balance);
         }
+
+        [Fact]
+        public async Task ExecuteTemplateActionAppliesFinancialActionsFromTemplate()
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, catalogService);
+            var created = await sessionService.CreateSessionAsync(
+                new CreateSessionRequest(
+                    "generic-property-trading",
+                    "standard-edition",
+                    "1.0.0",
+                    "Host",
+                    new Dictionary<string, System.Text.Json.JsonElement>()
+                ),
+                CancellationToken.None
+            );
+            var joined = await sessionService.JoinSessionAsync(
+                new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                CancellationToken.None
+            );
+
+            var income = await sessionService.ExecuteTemplateActionAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                "standard-income",
+                new ExecuteTemplateActionRequest(
+                    joined.ParticipantId,
+                    null,
+                    ExpectedSessionVersion: 2,
+                    IdempotencyKey: "action-1",
+                    Note: string.Empty
+                ),
+                CancellationToken.None
+            );
+            var playerAfterIncome = income.Snapshot.Accounts.Single(account =>
+                account.OwnerId == joined.ParticipantId
+            );
+            var bankAfterIncome = income.Snapshot.Accounts.Single(account => account.OwnerType == "bank");
+            Assert.Equal(1700, playerAfterIncome.Balance);
+            Assert.Equal(-200, bankAfterIncome.Balance);
+            Assert.Equal("Action: Standard income", income.Transaction.Note);
+
+            var fee = await sessionService.ExecuteTemplateActionAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                "standard-fee",
+                new ExecuteTemplateActionRequest(
+                    joined.ParticipantId,
+                    null,
+                    ExpectedSessionVersion: 3,
+                    IdempotencyKey: "action-2",
+                    Note: string.Empty
+                ),
+                CancellationToken.None
+            );
+            var playerAfterFee = fee.Snapshot.Accounts.Single(account =>
+                account.OwnerId == joined.ParticipantId
+            );
+            var bankAfterFee = fee.Snapshot.Accounts.Single(account => account.OwnerType == "bank");
+            Assert.Equal(1650, playerAfterFee.Balance);
+            Assert.Equal(-150, bankAfterFee.Balance);
+            Assert.Equal("Action: Standard fee", fee.Transaction.Note);
+        }
+
+        [Fact]
+        public async Task ExecuteTemplateActionRejectsUnsupportedOperationTypes()
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, catalogService);
+            var created = await sessionService.CreateSessionAsync(
+                new CreateSessionRequest(
+                    "generic-life-journey",
+                    "family-edition",
+                    "1.0.0",
+                    "Host",
+                    new Dictionary<string, System.Text.Json.JsonElement>()
+                ),
+                CancellationToken.None
+            );
+            var joined = await sessionService.JoinSessionAsync(
+                new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                CancellationToken.None
+            );
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                sessionService.ExecuteTemplateActionAsync(
+                    created.SessionId,
+                    created.HostParticipantId,
+                    created.ReconnectCredential,
+                    "buy-home",
+                    new ExecuteTemplateActionRequest(
+                        joined.ParticipantId,
+                        null,
+                        ExpectedSessionVersion: 2,
+                        IdempotencyKey: "unsupported-action",
+                        Note: string.Empty
+                    ),
+                    CancellationToken.None
+                )
+            );
+
+            Assert.Equal("unsupported-template-action", exception.Message);
+        }
 }

@@ -12,6 +12,7 @@ Implemented in scaffold:
 - `POST /api/v1/sessions/{sessionId}/transfer`
 - `POST /api/v1/sessions/{sessionId}/bank-payments`
 - `POST /api/v1/sessions/{sessionId}/bank-collections`
+- `POST /api/v1/sessions/{sessionId}/actions/{actionId}/execute`
 - `POST /api/v1/sessions/{sessionId}/corrections`
 - `GET /api/v1/sessions/{sessionId}/ledger`
 - `GET /api/v1/sessions/{sessionId}/export`
@@ -118,6 +119,10 @@ Host-authorized bank-to-participant payment command with expected session versio
 ### `POST /api/v1/sessions/{sessionId}/bank-collections`
 
 Host-authorized participant-to-bank collection command with expected session version and idempotency key.
+
+### `POST /api/v1/sessions/{sessionId}/actions/{actionId}/execute`
+
+Host-authorized template action execution command. Current implementation supports financial action operations (`bank-to-player`, `player-to-bank`, and `player-to-player`) and requires expected session version plus idempotency key.
 
 ### `POST /api/v1/sessions/{sessionId}/corrections`
 
