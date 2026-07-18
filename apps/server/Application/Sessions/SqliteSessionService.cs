@@ -669,11 +669,6 @@ public sealed class SqliteSessionService : ISessionService
             cancellationToken
         );
         var action = ResolveFinancialAction(snapshot.TemplateJson, normalizedActionId);
-        if (!string.Equals(action.Scope, "single-player", StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("unsupported-template-action");
-        }
-
         var policy = ParseBankPolicy(snapshot.TemplateJson, snapshot.AllowPlayerOverdraft);
         var currentBalances = await dbContext.Accounts
             .Where(record => record.SessionId == sessionId)
@@ -683,77 +678,22 @@ public sealed class SqliteSessionService : ISessionService
             ? $"Action: {action.Label}"
             : request.Note.Trim();
 
-        AccountEntity fromAccount;
-        AccountEntity toAccount;
-        bool allowFromOverdraft;
-        switch (action.OperationType)
-        {
-            case FinancialActionOperationType.BankToPlayer:
-                if (!request.PrimaryParticipantId.HasValue || request.PrimaryParticipantId.Value == Guid.Empty)
-                {
-                    throw new InvalidOperationException("invalid-request");
-                }
-
-                fromAccount = await FindBankAccountAsync(sessionId, cancellationToken);
-                toAccount = await FindParticipantAccountAsync(
-                    sessionId,
-                    request.PrimaryParticipantId.Value,
-                    cancellationToken
-                );
-                allowFromOverdraft = policy.IsUnlimitedBank;
-                break;
-            case FinancialActionOperationType.PlayerToBank:
-                if (!request.PrimaryParticipantId.HasValue || request.PrimaryParticipantId.Value == Guid.Empty)
-                {
-                    throw new InvalidOperationException("invalid-request");
-                }
-
-                fromAccount = await FindParticipantAccountAsync(
-                    sessionId,
-                    request.PrimaryParticipantId.Value,
-                    cancellationToken
-                );
-                toAccount = await FindBankAccountAsync(sessionId, cancellationToken);
-                allowFromOverdraft = policy.AllowPlayerOverdraft;
-                break;
-            case FinancialActionOperationType.PlayerToPlayer:
-                if (
-                    !request.PrimaryParticipantId.HasValue
-                    || request.PrimaryParticipantId.Value == Guid.Empty
-                    || !request.SecondaryParticipantId.HasValue
-                    || request.SecondaryParticipantId.Value == Guid.Empty
-                )
-                {
-                    throw new InvalidOperationException("invalid-request");
-                }
-
-                fromAccount = await FindParticipantAccountAsync(
-                    sessionId,
-                    request.PrimaryParticipantId.Value,
-                    cancellationToken
-                );
-                toAccount = await FindParticipantAccountAsync(
-                    sessionId,
-                    request.SecondaryParticipantId.Value,
-                    cancellationToken
-                );
-                allowFromOverdraft = policy.AllowPlayerOverdraft;
-                break;
-            default:
-                throw new InvalidOperationException("unsupported-template-action");
-        }
+        var instructions = await ResolveActionTransferInstructionsAsync(
+            sessionId,
+            action,
+            request,
+            policy,
+            cancellationToken
+        );
 
         MoneyMutationResult mutation;
         try
         {
-            mutation = MoneyMutationEngine.ApplyTransfer(
+            mutation = MoneyMutationEngine.ApplyTransferBatch(
                 currentBalances,
                 sessionId,
                 actorParticipantId,
-                fromAccount.Id,
-                toAccount.Id,
-                action.Amount,
-                allowFromOverdraft,
+                instructions,
                 nextSequence,
                 DateTimeOffset.UtcNow,
                 note
@@ -1309,6 +1249,155 @@ public sealed class SqliteSessionService : ISessionService
         }
 
         return amount;
+    }
+
+    private async Task<IReadOnlyList<TransferInstruction>> ResolveActionTransferInstructionsAsync(
+        Guid sessionId,
+        ResolvedFinancialAction action,
+        ExecuteTemplateActionRequest request,
+        BankPolicy policy,
+        CancellationToken cancellationToken
+    )
+    {
+        if (string.Equals(action.Scope, "single-player", StringComparison.Ordinal))
+        {
+            return await ResolveSinglePlayerActionInstructionsAsync(
+                sessionId,
+                action,
+                request,
+                policy,
+                cancellationToken
+            );
+        }
+
+        if (string.Equals(action.Scope, "two-players", StringComparison.Ordinal))
+        {
+            if (action.OperationType != FinancialActionOperationType.PlayerToPlayer)
+            {
+                throw new InvalidOperationException("unsupported-template-action");
+            }
+
+            return await ResolveSinglePlayerActionInstructionsAsync(
+                sessionId,
+                action,
+                request,
+                policy,
+                cancellationToken
+            );
+        }
+
+        if (!string.Equals(action.Scope, "all-players", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("unsupported-template-action");
+        }
+
+        if (action.OperationType == FinancialActionOperationType.PlayerToPlayer)
+        {
+            throw new InvalidOperationException("unsupported-template-action");
+        }
+
+        var bankAccount = await FindBankAccountAsync(sessionId, cancellationToken);
+        var participantAccounts = await dbContext.Accounts
+            .Where(record => record.SessionId == sessionId && record.OwnerType == "participant")
+            .OrderBy(record => record.OwnerId)
+            .ToListAsync(cancellationToken);
+        if (participantAccounts.Count == 0)
+        {
+            throw new InvalidOperationException("invalid-request");
+        }
+
+        return action.OperationType switch
+        {
+            FinancialActionOperationType.BankToPlayer => participantAccounts
+                .Select(account => new TransferInstruction(
+                    bankAccount.Id,
+                    account.Id,
+                    action.Amount,
+                    policy.IsUnlimitedBank
+                ))
+                .ToList(),
+            FinancialActionOperationType.PlayerToBank => participantAccounts
+                .Select(account => new TransferInstruction(
+                    account.Id,
+                    bankAccount.Id,
+                    action.Amount,
+                    policy.AllowPlayerOverdraft
+                ))
+                .ToList(),
+            _ => throw new InvalidOperationException("unsupported-template-action")
+        };
+    }
+
+    private async Task<IReadOnlyList<TransferInstruction>> ResolveSinglePlayerActionInstructionsAsync(
+        Guid sessionId,
+        ResolvedFinancialAction action,
+        ExecuteTemplateActionRequest request,
+        BankPolicy policy,
+        CancellationToken cancellationToken
+    )
+    {
+        AccountEntity fromAccount;
+        AccountEntity toAccount;
+        bool allowFromOverdraft;
+
+        switch (action.OperationType)
+        {
+            case FinancialActionOperationType.BankToPlayer:
+                if (!request.PrimaryParticipantId.HasValue || request.PrimaryParticipantId.Value == Guid.Empty)
+                {
+                    throw new InvalidOperationException("invalid-request");
+                }
+
+                fromAccount = await FindBankAccountAsync(sessionId, cancellationToken);
+                toAccount = await FindParticipantAccountAsync(
+                    sessionId,
+                    request.PrimaryParticipantId.Value,
+                    cancellationToken
+                );
+                allowFromOverdraft = policy.IsUnlimitedBank;
+                break;
+            case FinancialActionOperationType.PlayerToBank:
+                if (!request.PrimaryParticipantId.HasValue || request.PrimaryParticipantId.Value == Guid.Empty)
+                {
+                    throw new InvalidOperationException("invalid-request");
+                }
+
+                fromAccount = await FindParticipantAccountAsync(
+                    sessionId,
+                    request.PrimaryParticipantId.Value,
+                    cancellationToken
+                );
+                toAccount = await FindBankAccountAsync(sessionId, cancellationToken);
+                allowFromOverdraft = policy.AllowPlayerOverdraft;
+                break;
+            case FinancialActionOperationType.PlayerToPlayer:
+                if (
+                    !request.PrimaryParticipantId.HasValue
+                    || request.PrimaryParticipantId.Value == Guid.Empty
+                    || !request.SecondaryParticipantId.HasValue
+                    || request.SecondaryParticipantId.Value == Guid.Empty
+                )
+                {
+                    throw new InvalidOperationException("invalid-request");
+                }
+
+                fromAccount = await FindParticipantAccountAsync(
+                    sessionId,
+                    request.PrimaryParticipantId.Value,
+                    cancellationToken
+                );
+                toAccount = await FindParticipantAccountAsync(
+                    sessionId,
+                    request.SecondaryParticipantId.Value,
+                    cancellationToken
+                );
+                allowFromOverdraft = policy.AllowPlayerOverdraft;
+                break;
+            default:
+                throw new InvalidOperationException("unsupported-template-action");
+        }
+
+        return [new TransferInstruction(fromAccount.Id, toAccount.Id, action.Amount, allowFromOverdraft)];
     }
 
     private async Task<long> GetNextSequenceAsync(Guid sessionId, CancellationToken cancellationToken)

@@ -930,4 +930,183 @@ public sealed class SessionScaffoldTests
 
             Assert.Equal("unsupported-template-action", exception.Message);
         }
+
+        [Fact]
+        public async Task ExecuteTemplateActionSupportsAllPlayersScopeForBankPayments()
+        {
+            var tempTemplatesRoot = CreateTempTemplatesRoot();
+            var templatePath = Path.Combine(
+                tempTemplatesRoot,
+                "samples",
+                "generic-property-trading",
+                "template.json"
+            );
+
+            try
+            {
+                var json = await File.ReadAllTextAsync(templatePath);
+                var updatedJson = json.Replace(
+                    "\"scope\": \"single-player\"",
+                    "\"scope\": \"all-players\"",
+                    StringComparison.Ordinal
+                );
+                await File.WriteAllTextAsync(templatePath, updatedJson);
+
+                var isolatedCatalog = new FileTemplateCatalogService(tempTemplatesRoot);
+                await using var connection = new SqliteConnection("Data Source=:memory:");
+                await connection.OpenAsync();
+                var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                    .UseSqlite(connection)
+                    .Options;
+                await using var dbContext = new BankersSeatDbContext(dbOptions);
+                await dbContext.Database.MigrateAsync();
+                var sessionService = new SqliteSessionService(dbContext, isolatedCatalog);
+                var created = await sessionService.CreateSessionAsync(
+                    new CreateSessionRequest(
+                        "generic-property-trading",
+                        "standard-edition",
+                        "1.0.0",
+                        "Host",
+                        new Dictionary<string, System.Text.Json.JsonElement>()
+                    ),
+                    CancellationToken.None
+                );
+                var joined = await sessionService.JoinSessionAsync(
+                    new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                    CancellationToken.None
+                );
+
+                var response = await sessionService.ExecuteTemplateActionAsync(
+                    created.SessionId,
+                    created.HostParticipantId,
+                    created.ReconnectCredential,
+                    "standard-income",
+                    new ExecuteTemplateActionRequest(
+                        null,
+                        null,
+                        ExpectedSessionVersion: 2,
+                        IdempotencyKey: "all-players-1",
+                        Note: string.Empty
+                    ),
+                    CancellationToken.None
+                );
+
+                var host = response.Snapshot.Accounts.Single(account =>
+                    account.OwnerId == created.HostParticipantId
+                );
+                var player = response.Snapshot.Accounts.Single(account =>
+                    account.OwnerId == joined.ParticipantId
+                );
+                var bank = response.Snapshot.Accounts.Single(account => account.OwnerType == "bank");
+                Assert.Equal(1700, host.Balance);
+                Assert.Equal(1700, player.Balance);
+                Assert.Equal(-400, bank.Balance);
+                Assert.Equal(4, response.Transaction.Postings.Count);
+            }
+            finally
+            {
+                if (Directory.Exists(tempTemplatesRoot))
+                {
+                    Directory.Delete(tempTemplatesRoot, recursive: true);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ExecuteTemplateActionSupportsTwoPlayersScopeForPlayerTransfers()
+        {
+            var tempTemplatesRoot = CreateTempTemplatesRoot();
+            var templatePath = Path.Combine(
+                tempTemplatesRoot,
+                "samples",
+                "generic-property-trading",
+                "template.json"
+            );
+
+            try
+            {
+                var json = await File.ReadAllTextAsync(templatePath);
+                var updatedJson = json.Replace(
+                    "\"scope\": \"single-player\",\n      \"operation\": {\n        \"type\": \"player-to-bank\"",
+                    "\"scope\": \"two-players\",\n      \"operation\": {\n        \"type\": \"player-to-player\"",
+                    StringComparison.Ordinal
+                );
+                await File.WriteAllTextAsync(templatePath, updatedJson);
+
+                var isolatedCatalog = new FileTemplateCatalogService(tempTemplatesRoot);
+                await using var connection = new SqliteConnection("Data Source=:memory:");
+                await connection.OpenAsync();
+                var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                    .UseSqlite(connection)
+                    .Options;
+                await using var dbContext = new BankersSeatDbContext(dbOptions);
+                await dbContext.Database.MigrateAsync();
+                var sessionService = new SqliteSessionService(dbContext, isolatedCatalog);
+                var created = await sessionService.CreateSessionAsync(
+                    new CreateSessionRequest(
+                        "generic-property-trading",
+                        "standard-edition",
+                        "1.0.0",
+                        "Host",
+                        new Dictionary<string, System.Text.Json.JsonElement>()
+                    ),
+                    CancellationToken.None
+                );
+                var joined = await sessionService.JoinSessionAsync(
+                    new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                    CancellationToken.None
+                );
+
+                var response = await sessionService.ExecuteTemplateActionAsync(
+                    created.SessionId,
+                    created.HostParticipantId,
+                    created.ReconnectCredential,
+                    "standard-fee",
+                    new ExecuteTemplateActionRequest(
+                        created.HostParticipantId,
+                        joined.ParticipantId,
+                        ExpectedSessionVersion: 2,
+                        IdempotencyKey: "two-players-1",
+                        Note: string.Empty
+                    ),
+                    CancellationToken.None
+                );
+
+                var host = response.Snapshot.Accounts.Single(account =>
+                    account.OwnerId == created.HostParticipantId
+                );
+                var player = response.Snapshot.Accounts.Single(account =>
+                    account.OwnerId == joined.ParticipantId
+                );
+                var bank = response.Snapshot.Accounts.Single(account => account.OwnerType == "bank");
+                Assert.Equal(1450, host.Balance);
+                Assert.Equal(1550, player.Balance);
+                Assert.Equal(0, bank.Balance);
+                Assert.Equal(2, response.Transaction.Postings.Count);
+            }
+            finally
+            {
+                if (Directory.Exists(tempTemplatesRoot))
+                {
+                    Directory.Delete(tempTemplatesRoot, recursive: true);
+                }
+            }
+        }
+
+        private static string CreateTempTemplatesRoot()
+        {
+            var tempTemplatesRoot = Path.Combine(
+                Path.GetTempPath(),
+                $"bankers-seat-templates-{Guid.NewGuid():N}"
+            );
+            var sourceTemplateDir = Path.Combine(TemplatesRoot, "samples", "generic-property-trading");
+            var targetTemplateDir = Path.Combine(tempTemplatesRoot, "samples", "generic-property-trading");
+            Directory.CreateDirectory(targetTemplateDir);
+            File.Copy(
+                Path.Combine(sourceTemplateDir, "template.json"),
+                Path.Combine(targetTemplateDir, "template.json"),
+                overwrite: true
+            );
+            return tempTemplatesRoot;
+        }
 }

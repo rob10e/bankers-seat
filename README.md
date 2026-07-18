@@ -80,7 +80,7 @@ bankers-seat/
 - Template validation CLI is implemented and available as `pnpm templates:validate`.
 - SQLite persistence baseline is implemented with EF Core, checked-in migrations, and transactional session/participant/account/template snapshot storage.
 - Financial transfer, bank payment, bank collection, and correction command handling is implemented with session-version checks, idempotency, and immutable ledger transaction/posting persistence.
-- Financial transfer, bank payment, bank collection, template financial action execution, and correction command handling is implemented with session-version checks, idempotency, and immutable ledger transaction/posting persistence.
+- Financial transfer, bank payment, bank collection, template financial action execution (single-player, two-player, and all-player financial scopes), and correction command handling is implemented with session-version checks, idempotency, and immutable ledger transaction/posting persistence.
 - GitHub Actions CI workflow runs template validation, workspace lint/typecheck/tests, and .NET build/integration tests on pushes and pull requests.
 
 ## Planning document index

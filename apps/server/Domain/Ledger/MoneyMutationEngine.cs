@@ -15,60 +15,90 @@ public static class MoneyMutationEngine
         string note
     )
     {
-        if (amount <= 0)
+        return ApplyTransferBatch(
+            currentBalances,
+            sessionId,
+            actorParticipantId,
+            [
+                new TransferInstruction(debitAccountId, creditAccountId, amount, allowOverdraft)
+            ],
+            sequence,
+            createdAtUtc,
+            note
+        );
+    }
+
+    public static MoneyMutationResult ApplyTransferBatch(
+        IReadOnlyDictionary<Guid, long> currentBalances,
+        Guid sessionId,
+        Guid actorParticipantId,
+        IReadOnlyList<TransferInstruction> instructions,
+        long sequence,
+        DateTimeOffset createdAtUtc,
+        string note
+    )
+    {
+        if (instructions.Count == 0)
         {
             throw new DomainRuleViolationException(
-                "invalid-transfer-amount",
-                "Transfer amount must be a positive integer."
+                "invalid-transfer-batch",
+                "Transfer batch must include at least one transfer instruction."
             );
         }
 
-        if (debitAccountId == creditAccountId)
+        var balances = new Dictionary<Guid, long>(currentBalances);
+        var postings = new List<LedgerPosting>(instructions.Count * 2);
+        foreach (var instruction in instructions)
         {
-            throw new DomainRuleViolationException(
-                "invalid-transfer-accounts",
-                "Transfer requires distinct debit and credit accounts."
-            );
+            if (instruction.Amount <= 0)
+            {
+                throw new DomainRuleViolationException(
+                    "invalid-transfer-amount",
+                    "Transfer amount must be a positive integer."
+                );
+            }
+
+            if (instruction.DebitAccountId == instruction.CreditAccountId)
+            {
+                throw new DomainRuleViolationException(
+                    "invalid-transfer-accounts",
+                    "Transfer requires distinct debit and credit accounts."
+                );
+            }
+
+            if (!balances.TryGetValue(instruction.DebitAccountId, out var debitBefore))
+            {
+                throw new DomainRuleViolationException(
+                    "account-not-found",
+                    $"Debit account '{instruction.DebitAccountId}' does not exist in the session."
+                );
+            }
+
+            if (!balances.TryGetValue(instruction.CreditAccountId, out var creditBefore))
+            {
+                throw new DomainRuleViolationException(
+                    "account-not-found",
+                    $"Credit account '{instruction.CreditAccountId}' does not exist in the session."
+                );
+            }
+
+            var debitAfter = checked(debitBefore - instruction.Amount);
+            if (!instruction.AllowOverdraft && debitAfter < 0)
+            {
+                throw new DomainRuleViolationException(
+                    "insufficient-funds",
+                    "Transfer would exceed available funds while overdrafts are disallowed."
+                );
+            }
+
+            var creditAfter = checked(creditBefore + instruction.Amount);
+            balances[instruction.DebitAccountId] = debitAfter;
+            balances[instruction.CreditAccountId] = creditAfter;
+            postings.Add(new LedgerPosting(instruction.DebitAccountId, -instruction.Amount, debitAfter));
+            postings.Add(new LedgerPosting(instruction.CreditAccountId, instruction.Amount, creditAfter));
         }
 
-        if (!currentBalances.TryGetValue(debitAccountId, out var debitBefore))
-        {
-            throw new DomainRuleViolationException(
-                "account-not-found",
-                $"Debit account '{debitAccountId}' does not exist in the session."
-            );
-        }
-
-        if (!currentBalances.TryGetValue(creditAccountId, out var creditBefore))
-        {
-            throw new DomainRuleViolationException(
-                "account-not-found",
-                $"Credit account '{creditAccountId}' does not exist in the session."
-            );
-        }
-
-        var debitAfter = checked(debitBefore - amount);
-        if (!allowOverdraft && debitAfter < 0)
-        {
-            throw new DomainRuleViolationException(
-                "insufficient-funds",
-                "Transfer would exceed available funds while overdrafts are disallowed."
-            );
-        }
-
-        var creditAfter = checked(creditBefore + amount);
-        var postings = new List<LedgerPosting>
-        {
-            new(debitAccountId, -amount, debitAfter),
-            new(creditAccountId, amount, creditAfter)
-        };
         EnsureBalanced(postings);
-
-        var balances = new Dictionary<Guid, long>(currentBalances)
-        {
-            [debitAccountId] = debitAfter,
-            [creditAccountId] = creditAfter
-        };
 
         return new MoneyMutationResult(
             balances,
@@ -170,3 +200,10 @@ public static class MoneyMutationEngine
         }
     }
 }
+
+public sealed record TransferInstruction(
+    Guid DebitAccountId,
+    Guid CreditAccountId,
+    long Amount,
+    bool AllowOverdraft
+);

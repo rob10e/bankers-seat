@@ -22,7 +22,7 @@
 
 ### Still pending in immediate roadmap
 
-- Full template action execution coverage beyond financial operations (field updates, composite/multi-step actions, and all-player scopes).
+- Full template action execution coverage beyond current support (field updates and composite/multi-step actions).
 
 ## Phase 0 — Foundation and validation
 
