@@ -11,12 +11,12 @@
 - Template validator CLI and root command `pnpm templates:validate`.
 - SQLite persistence baseline with EF Core `DbContext`, checked-in migration, and persisted sessions/participants/accounts/template snapshots.
 - Template validation test suite and integration coverage for active-session template snapshot immutability.
+- Domain money and correction invariant tests for balanced postings, overdraft behavior, duplicate correction protection, and atomic failure handling.
+- GitHub Actions CI workflow enforcing template validation, workspace lint/typecheck/tests, and .NET build/integration tests.
 
 ### Still pending in immediate roadmap
 
 - Domain command handlers for financial mutations and immutable ledger flows.
-- Money/correction invariant test suite.
-- CI quality-gate workflow.
 
 ## Phase 0 — Foundation and validation
 

@@ -4,6 +4,7 @@
 
 - Web smoke test covering routed app shell render (`apps/web/src/app/app.test.tsx`).
 - Template validation unit tests covering schema, semantic rules, discovery, and JSON parsing (`packages/template-tools/src/validation.test.ts`).
+- Domain money mutation and correction invariant tests covering overdraft policy, balanced postings, duplicate correction rejection, and atomic failure behavior (`tests/integration/server/money-correction-domain-tests.cs`).
 - Integration tests for template catalog discovery, session snapshot persistence, and active-session snapshot stability after source template edits (`tests/integration/server/session-scaffold-tests.cs`).
 - Template schema and semantic validation CLI via `pnpm templates:validate`.
 

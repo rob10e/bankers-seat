@@ -78,6 +78,7 @@ bankers-seat/
 - SignalR hub is scaffolded at `/hubs/game` with session subscribe and resync methods.
 - Template validation CLI is implemented and available as `pnpm templates:validate`.
 - SQLite persistence baseline is implemented with EF Core, checked-in migrations, and transactional session/participant/account/template snapshot storage.
+- GitHub Actions CI workflow runs template validation, workspace lint/typecheck/tests, and .NET build/integration tests on pushes and pull requests.
 
 ## Planning document index
 
