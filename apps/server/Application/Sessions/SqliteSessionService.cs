@@ -769,7 +769,9 @@ public sealed class SqliteSessionService : ISessionService
                     financialInstructions.AddRange(stepInstructions);
                 }
                 else if (
-                    step.OperationType is ActionOperationType.SetField or ActionOperationType.IncrementField
+                    step.OperationType is ActionOperationType.SetField
+                        or ActionOperationType.ToggleField
+                        or ActionOperationType.IncrementField
                 )
                 {
                     fieldSteps.Add(stepAction);
@@ -838,7 +840,11 @@ public sealed class SqliteSessionService : ISessionService
                 responseTransaction = ToLedgerTransactionResponse(actionTransaction);
             }
         }
-        else if (action.OperationType is ActionOperationType.SetField or ActionOperationType.IncrementField)
+        else if (
+            action.OperationType is ActionOperationType.SetField
+                or ActionOperationType.ToggleField
+                or ActionOperationType.IncrementField
+        )
         {
             await ApplyFieldActionAsync(
                 sessionId,
@@ -1527,6 +1533,14 @@ public sealed class SqliteSessionService : ISessionService
                     operation.Clone(),
                     []
                 ),
+                "toggle-field" => new ResolvedTemplateAction(
+                    ActionOperationType.ToggleField,
+                    null,
+                    label,
+                    scope,
+                    operation.Clone(),
+                    []
+                ),
                 "increment-field" => new ResolvedTemplateAction(
                     ActionOperationType.IncrementField,
                     null,
@@ -1682,6 +1696,11 @@ public sealed class SqliteSessionService : ISessionService
                 ),
                 "set-field" => new ResolvedTemplateActionStep(
                     ActionOperationType.SetField,
+                    null,
+                    step.Clone()
+                ),
+                "toggle-field" => new ResolvedTemplateActionStep(
+                    ActionOperationType.ToggleField,
                     null,
                     step.Clone()
                 ),
@@ -1935,6 +1954,11 @@ public sealed class SqliteSessionService : ISessionService
             throw new InvalidOperationException("unsupported-template-action");
         }
 
+        if (action.OperationType == ActionOperationType.ToggleField && definition.Type != "boolean")
+        {
+            throw new InvalidOperationException("unsupported-template-action");
+        }
+
         var targetParticipantIds = await ResolveFieldActionParticipantIdsAsync(
             sessionId,
             action.Scope,
@@ -1964,6 +1988,7 @@ public sealed class SqliteSessionService : ISessionService
             var updatedValueJson = action.OperationType switch
             {
                 ActionOperationType.SetField => ResolveSetFieldValueJson(action.Operation, definition),
+                ActionOperationType.ToggleField => ResolveToggledFieldValueJson(entity.ValueJson),
                 ActionOperationType.IncrementField => ResolveIncrementedFieldValueJson(
                     action.Operation,
                     definition,
@@ -2051,6 +2076,21 @@ public sealed class SqliteSessionService : ISessionService
         }
 
         return JsonSerializer.Serialize(updated);
+    }
+
+    private static string ResolveToggledFieldValueJson(string currentValueJson)
+    {
+        using var currentDocument = JsonDocument.Parse(currentValueJson);
+        var currentValue = currentDocument.RootElement;
+        if (
+            currentValue.ValueKind != JsonValueKind.True
+            && currentValue.ValueKind != JsonValueKind.False
+        )
+        {
+            throw new InvalidOperationException("field-value-invalid");
+        }
+
+        return currentValue.ValueKind == JsonValueKind.True ? "false" : "true";
     }
 
     private static string ValidateAndNormalizeFieldValueJson(
@@ -2408,6 +2448,7 @@ public sealed class SqliteSessionService : ISessionService
         PlayerToPlayer,
         AdjustPlayerBalance,
         SetField,
+        ToggleField,
         IncrementField,
         Composite
     }

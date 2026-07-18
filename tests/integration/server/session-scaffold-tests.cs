@@ -1052,6 +1052,155 @@ public sealed class SessionScaffoldTests
         }
 
         [Fact]
+        public async Task ExecuteTemplateActionAppliesToggleFieldOperation()
+        {
+            var tempTemplatesRoot = CreateTempTemplatesRoot("generic-life-journey");
+            var templatePath = Path.Combine(
+                tempTemplatesRoot,
+                "samples",
+                "generic-life-journey",
+                "template.json"
+            );
+
+            try
+            {
+                var json = await File.ReadAllTextAsync(templatePath);
+                var updatedJson = json.Replace(
+                    "\"type\": \"increment-field\",\n        \"fieldId\": \"children-count\",\n        \"amount\": 1",
+                    "\"type\": \"toggle-field\",\n        \"fieldId\": \"owns-home\"",
+                    StringComparison.Ordinal
+                );
+                await File.WriteAllTextAsync(templatePath, updatedJson);
+
+                var isolatedCatalog = new FileTemplateCatalogService(tempTemplatesRoot);
+                await using var connection = new SqliteConnection("Data Source=:memory:");
+                await connection.OpenAsync();
+                var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                    .UseSqlite(connection)
+                    .Options;
+                await using var dbContext = new BankersSeatDbContext(dbOptions);
+                await dbContext.Database.MigrateAsync();
+                var sessionService = new SqliteSessionService(dbContext, isolatedCatalog);
+                var created = await sessionService.CreateSessionAsync(
+                    new CreateSessionRequest(
+                        "generic-life-journey",
+                        "family-edition",
+                        "1.0.0",
+                        "Host",
+                        new Dictionary<string, System.Text.Json.JsonElement>()
+                    ),
+                    CancellationToken.None
+                );
+                var joined = await sessionService.JoinSessionAsync(
+                    new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                    CancellationToken.None
+                );
+
+                var response = await sessionService.ExecuteTemplateActionAsync(
+                    created.SessionId,
+                    created.HostParticipantId,
+                    created.ReconnectCredential,
+                    "new-child",
+                    new ExecuteTemplateActionRequest(
+                        joined.ParticipantId,
+                        null,
+                        ExpectedSessionVersion: 2,
+                        IdempotencyKey: "field-toggle-1",
+                        Note: string.Empty
+                    ),
+                    CancellationToken.None
+                );
+
+                var ownsHomeField = response.Snapshot.PlayerFieldValues.Single(value =>
+                    value.ParticipantId == joined.ParticipantId && value.FieldId == "owns-home"
+                );
+                Assert.Equal("true", ownsHomeField.ValueJson);
+                Assert.Equal("action", response.Transaction.Kind);
+                Assert.Empty(response.Transaction.Postings);
+            }
+            finally
+            {
+                if (Directory.Exists(tempTemplatesRoot))
+                {
+                    Directory.Delete(tempTemplatesRoot, recursive: true);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ExecuteTemplateActionRejectsToggleFieldForNonBooleanFields()
+        {
+            var tempTemplatesRoot = CreateTempTemplatesRoot("generic-life-journey");
+            var templatePath = Path.Combine(
+                tempTemplatesRoot,
+                "samples",
+                "generic-life-journey",
+                "template.json"
+            );
+
+            try
+            {
+                var json = await File.ReadAllTextAsync(templatePath);
+                var updatedJson = json.Replace(
+                    "\"type\": \"increment-field\",\n        \"fieldId\": \"children-count\",\n        \"amount\": 1",
+                    "\"type\": \"toggle-field\",\n        \"fieldId\": \"children-count\"",
+                    StringComparison.Ordinal
+                );
+                await File.WriteAllTextAsync(templatePath, updatedJson);
+
+                var isolatedCatalog = new FileTemplateCatalogService(tempTemplatesRoot);
+                await using var connection = new SqliteConnection("Data Source=:memory:");
+                await connection.OpenAsync();
+                var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                    .UseSqlite(connection)
+                    .Options;
+                await using var dbContext = new BankersSeatDbContext(dbOptions);
+                await dbContext.Database.MigrateAsync();
+                var sessionService = new SqliteSessionService(dbContext, isolatedCatalog);
+                var created = await sessionService.CreateSessionAsync(
+                    new CreateSessionRequest(
+                        "generic-life-journey",
+                        "family-edition",
+                        "1.0.0",
+                        "Host",
+                        new Dictionary<string, System.Text.Json.JsonElement>()
+                    ),
+                    CancellationToken.None
+                );
+                var joined = await sessionService.JoinSessionAsync(
+                    new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                    CancellationToken.None
+                );
+
+                var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    sessionService.ExecuteTemplateActionAsync(
+                        created.SessionId,
+                        created.HostParticipantId,
+                        created.ReconnectCredential,
+                        "new-child",
+                        new ExecuteTemplateActionRequest(
+                            joined.ParticipantId,
+                            null,
+                            ExpectedSessionVersion: 2,
+                            IdempotencyKey: "field-toggle-invalid-1",
+                            Note: string.Empty
+                        ),
+                        CancellationToken.None
+                    )
+                );
+
+                Assert.Equal("unsupported-template-action", exception.Message);
+            }
+            finally
+            {
+                if (Directory.Exists(tempTemplatesRoot))
+                {
+                    Directory.Delete(tempTemplatesRoot, recursive: true);
+                }
+            }
+        }
+
+        [Fact]
         public async Task ExecuteTemplateActionSupportsAdjustPlayerBalanceOperation()
         {
             var tempTemplatesRoot = CreateTempTemplatesRoot();

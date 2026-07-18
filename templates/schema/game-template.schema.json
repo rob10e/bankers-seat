@@ -654,6 +654,22 @@
         "value": {}
       }
     },
+    "toggleField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "fieldId"
+      ],
+      "properties": {
+        "type": {
+          "const": "toggle-field"
+        },
+        "fieldId": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
     "incrementField": {
       "type": "object",
       "additionalProperties": false,
@@ -690,6 +706,9 @@
         },
         {
           "$ref": "#/$defs/setField"
+        },
+        {
+          "$ref": "#/$defs/toggleField"
         },
         {
           "$ref": "#/$defs/incrementField"

@@ -243,6 +243,7 @@ Initial operation types:
 - `player-to-player`
 - `adjust-player-balance`
 - `set-field`
+- `toggle-field`
 - `increment-field`
 - `composite`
 

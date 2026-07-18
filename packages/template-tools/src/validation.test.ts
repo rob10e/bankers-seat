@@ -228,12 +228,24 @@ test("returns semantic issues for invalid enum defaults and numeric constraints"
       },
       confirmation: "never",
     },
+    {
+      id: "bad-toggle",
+      label: "Bad Toggle",
+      category: "status",
+      scope: "single-player",
+      operation: {
+        type: "toggle-field",
+        fieldId: "career",
+      },
+      confirmation: "never",
+    },
   ];
 
   const result = validateTemplateObject(template, schemaValidator, process.cwd());
   assert.equal(result.valid, false);
   assert.ok(result.issues.some((issue) => issue.code === "enum-default-not-found"));
   assert.ok(result.issues.some((issue) => issue.code === "increment-non-numeric-field"));
+  assert.ok(result.issues.some((issue) => issue.code === "toggle-non-boolean-field"));
 });
 
 test("returns semantic issues for disallowed asset extensions and missing icon keys", () => {

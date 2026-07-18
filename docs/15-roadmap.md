@@ -17,6 +17,7 @@
 - Bank-payment and bank-collection command handlers with transactional balance updates and immutable ledger postings.
 - Template financial action execution handler for declarative `bank-to-player`, `player-to-bank`, `player-to-player`, and `adjust-player-balance` operations with idempotency and immutable ledger postings.
 - Template field action execution support for `set-field` and `increment-field`, with persisted player field values in authorized snapshots.
+- Template field action execution extension for `toggle-field` with boolean-only validation and authorized snapshot updates.
 - Template composite action execution support for atomic multi-step actions combining supported financial and field operations.
 - Integration tests for transfer/correction command paths including replay, stale-version rejection, and duplicate-correction protection.
 - Authorized ledger read endpoint with cursor-style pagination over persisted immutable transactions/postings.
@@ -24,7 +25,7 @@
 
 ### Still pending in immediate roadmap
 
-- Additional template operation coverage beyond current support (future declarative operation extensions).
+- No immediate template-operation gaps are currently tracked.
 
 ## Phase 0 — Foundation and validation
 

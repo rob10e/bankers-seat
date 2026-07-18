@@ -14,6 +14,7 @@ type TemplateField = {
 
 type TemplateOperation =
   | { type: "set-field"; fieldId: string; value: unknown }
+  | { type: "toggle-field"; fieldId: string }
   | { type: "increment-field"; fieldId: string; amount: number }
   | { type: "composite"; steps: TemplateOperation[] }
   | { type: string; [key: string]: unknown };
@@ -117,7 +118,11 @@ const extractFieldOperations = (
     );
   }
 
-  if (operation.type === "set-field" || operation.type === "increment-field") {
+  if (
+    operation.type === "set-field"
+    || operation.type === "toggle-field"
+    || operation.type === "increment-field"
+  ) {
     return [{ operation, path }];
   }
 
@@ -300,6 +305,15 @@ const semanticValidateTemplate = (
             `increment-field requires numeric target field. Field '${fieldId}' has type '${field.type}'.`,
           );
         }
+      }
+
+      if (operation.type === "toggle-field" && field.type !== "boolean") {
+        addIssue(
+          issues,
+          "toggle-non-boolean-field",
+          path,
+          `toggle-field requires boolean target field. Field '${fieldId}' has type '${field.type}'.`,
+        );
       }
     });
   });
