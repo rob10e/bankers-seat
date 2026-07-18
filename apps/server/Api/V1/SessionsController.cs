@@ -193,6 +193,46 @@ public sealed class SessionsController : ControllerBase
         }
     }
 
+    [HttpGet("{sessionId:guid}/ledger")]
+    [ProducesResponseType<SessionLedgerResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SessionLedgerResponse>> GetLedgerPage(
+        [FromRoute] Guid sessionId,
+        [FromQuery] long? beforeSequence,
+        [FromQuery] int? take,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Ledger requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.GetAuthorizedLedgerPageAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                beforeSequence,
+                take ?? 50,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
     private ActionResult ToProblemDetails(InvalidOperationException exception)
     {
         var code = exception.Message;

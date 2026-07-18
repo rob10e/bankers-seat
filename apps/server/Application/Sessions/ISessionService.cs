@@ -27,6 +27,15 @@ public interface ISessionService
         CancellationToken cancellationToken
     );
 
+    Task<SessionLedgerResponse> GetAuthorizedLedgerPageAsync(
+        Guid sessionId,
+        Guid participantId,
+        string reconnectCredential,
+        long? beforeSequence,
+        int take,
+        CancellationToken cancellationToken
+    );
+
     Task<MoneyCommandResponse> TransferBetweenParticipantsAsync(
         Guid sessionId,
         Guid actorParticipantId,

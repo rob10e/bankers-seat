@@ -240,6 +240,67 @@ public sealed class SqliteSessionService : ISessionService
         return await BuildSnapshotAsync(sessionId, cancellationToken);
     }
 
+    public async Task<SessionLedgerResponse> GetAuthorizedLedgerPageAsync(
+        Guid sessionId,
+        Guid participantId,
+        string reconnectCredential,
+        long? beforeSequence,
+        int take,
+        CancellationToken cancellationToken
+    )
+    {
+        if (take is < 1 or > 200)
+        {
+            throw new InvalidOperationException("invalid-request");
+        }
+
+        var participant = await dbContext.Participants.SingleOrDefaultAsync(
+            record => record.Id == participantId && record.SessionId == sessionId,
+            cancellationToken
+        );
+        if (participant is null)
+        {
+            throw new InvalidOperationException("unauthorized-command");
+        }
+
+        if (!string.Equals(HashSecret(reconnectCredential), participant.ReconnectSecretHash, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("unauthorized-command");
+        }
+
+        var query = dbContext.LedgerTransactions
+            .Where(record => record.SessionId == sessionId)
+            .OrderByDescending(record => record.Sequence);
+        if (beforeSequence.HasValue)
+        {
+            query = query.Where(record => record.Sequence < beforeSequence.Value)
+                .OrderByDescending(record => record.Sequence);
+        }
+
+        var rows = await query.Take(take + 1).ToListAsync(cancellationToken);
+        var pageRows = rows.Take(take).ToList();
+        var pageTransactionIds = pageRows.Select(record => record.Id).ToHashSet();
+        var postings = await dbContext.LedgerPostings
+            .Where(record => record.SessionId == sessionId && pageTransactionIds.Contains(record.TransactionId))
+            .OrderBy(record => record.TransactionId)
+            .ThenBy(record => record.Id)
+            .ToListAsync(cancellationToken);
+        var postingsByTransaction = postings
+            .GroupBy(record => record.TransactionId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+        var transactions = pageRows.Select(record =>
+            ToLedgerTransactionResponse(
+                record,
+                postingsByTransaction.TryGetValue(record.Id, out var grouped) ? grouped : []
+            )
+        ).ToList();
+        long? nextBeforeSequence = rows.Count > take
+            ? pageRows.LastOrDefault()?.Sequence
+            : null;
+
+        return new SessionLedgerResponse(transactions, nextBeforeSequence);
+    }
+
     public async Task<MoneyCommandResponse> TransferBetweenParticipantsAsync(
         Guid sessionId,
         Guid actorParticipantId,
@@ -775,6 +836,27 @@ public sealed class SqliteSessionService : ISessionService
             transaction.Note,
             transaction.CreatedAtUtc,
             transaction.Postings.Select(posting => new LedgerPostingViewResponse(
+                posting.AccountId,
+                posting.Amount,
+                posting.BalanceAfter
+            )).ToList()
+        );
+    }
+
+    private static LedgerTransactionViewResponse ToLedgerTransactionResponse(
+        LedgerTransactionEntity transaction,
+        IReadOnlyList<LedgerPostingEntity> postings
+    )
+    {
+        return new LedgerTransactionViewResponse(
+            transaction.Id,
+            transaction.Sequence,
+            transaction.Kind,
+            transaction.ActorParticipantId,
+            transaction.CorrectsTransactionId,
+            transaction.Note,
+            transaction.CreatedAtUtc,
+            postings.Select(posting => new LedgerPostingViewResponse(
                 posting.AccountId,
                 posting.Amount,
                 posting.BalanceAfter

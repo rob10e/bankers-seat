@@ -15,6 +15,7 @@
 - GitHub Actions CI workflow enforcing template validation, workspace lint/typecheck/tests, and .NET build/integration tests.
 - Financial command handlers for participant transfers and transaction corrections with idempotency, version checks, host authorization, and immutable ledger persistence.
 - Integration tests for transfer/correction command paths including replay, stale-version rejection, and duplicate-correction protection.
+- Authorized ledger read endpoint with cursor-style pagination over persisted immutable transactions/postings.
 
 ### Still pending in immediate roadmap
 

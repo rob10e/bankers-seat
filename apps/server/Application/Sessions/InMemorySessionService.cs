@@ -205,6 +205,24 @@ public sealed class InMemorySessionService : ISessionService
         return Task.FromResult(BuildSnapshot(session));
     }
 
+    public Task<SessionLedgerResponse> GetAuthorizedLedgerPageAsync(
+        Guid sessionId,
+        Guid participantId,
+        string reconnectCredential,
+        long? beforeSequence,
+        int take,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = sessionId;
+        _ = participantId;
+        _ = reconnectCredential;
+        _ = beforeSequence;
+        _ = take;
+        _ = cancellationToken;
+        throw new InvalidOperationException("not-supported");
+    }
+
     public Task<MoneyCommandResponse> TransferBetweenParticipantsAsync(
         Guid sessionId,
         Guid actorParticipantId,

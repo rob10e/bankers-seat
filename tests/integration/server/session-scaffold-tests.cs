@@ -514,4 +514,133 @@ public sealed class SessionScaffoldTests
             );
             Assert.Equal("duplicate-correction", duplicate.Message);
         }
+
+        [Fact]
+        public async Task GetAuthorizedLedgerPageReturnsNewestFirstWithPaginationCursor()
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, catalogService);
+            var created = await sessionService.CreateSessionAsync(
+                new CreateSessionRequest(
+                    "generic-property-trading",
+                    "standard-edition",
+                    "1.0.0",
+                    "Host",
+                    new Dictionary<string, System.Text.Json.JsonElement>()
+                ),
+                CancellationToken.None
+            );
+            var joined = await sessionService.JoinSessionAsync(
+                new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                CancellationToken.None
+            );
+
+            var transferA = await sessionService.TransferBetweenParticipantsAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                new TransferBetweenParticipantsRequest(
+                    created.HostParticipantId,
+                    joined.ParticipantId,
+                    50,
+                    ExpectedSessionVersion: 2,
+                    IdempotencyKey: "ledger-a",
+                    Note: "A"
+                ),
+                CancellationToken.None
+            );
+            var transferB = await sessionService.TransferBetweenParticipantsAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                new TransferBetweenParticipantsRequest(
+                    joined.ParticipantId,
+                    created.HostParticipantId,
+                    10,
+                    ExpectedSessionVersion: 3,
+                    IdempotencyKey: "ledger-b",
+                    Note: "B"
+                ),
+                CancellationToken.None
+            );
+            var correction = await sessionService.CorrectTransactionAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                new CorrectTransactionRequest(
+                    transferA.Transaction.TransactionId,
+                    ExpectedSessionVersion: 4,
+                    IdempotencyKey: "ledger-c",
+                    Reason: "Fix"
+                ),
+                CancellationToken.None
+            );
+
+            var firstPage = await sessionService.GetAuthorizedLedgerPageAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                beforeSequence: null,
+                take: 2,
+                CancellationToken.None
+            );
+            Assert.Equal(2, firstPage.Transactions.Count);
+            Assert.Equal(correction.Transaction.TransactionId, firstPage.Transactions[0].TransactionId);
+            Assert.Equal(transferB.Transaction.TransactionId, firstPage.Transactions[1].TransactionId);
+            Assert.NotNull(firstPage.NextBeforeSequence);
+
+            var secondPage = await sessionService.GetAuthorizedLedgerPageAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                beforeSequence: firstPage.NextBeforeSequence,
+                take: 2,
+                CancellationToken.None
+            );
+            Assert.Single(secondPage.Transactions);
+            Assert.Equal(transferA.Transaction.TransactionId, secondPage.Transactions[0].TransactionId);
+            Assert.Null(secondPage.NextBeforeSequence);
+        }
+
+        [Fact]
+        public async Task GetAuthorizedLedgerPageRejectsUnauthorizedParticipant()
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, catalogService);
+            var created = await sessionService.CreateSessionAsync(
+                new CreateSessionRequest(
+                    "generic-property-trading",
+                    "standard-edition",
+                    "1.0.0",
+                    "Host",
+                    new Dictionary<string, System.Text.Json.JsonElement>()
+                ),
+                CancellationToken.None
+            );
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                sessionService.GetAuthorizedLedgerPageAsync(
+                    created.SessionId,
+                    Guid.NewGuid(),
+                    created.ReconnectCredential,
+                    beforeSequence: null,
+                    take: 50,
+                    CancellationToken.None
+                )
+            );
+
+            Assert.Equal("unauthorized-command", exception.Message);
+        }
 }
