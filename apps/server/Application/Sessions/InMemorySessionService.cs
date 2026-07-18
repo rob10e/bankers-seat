@@ -402,6 +402,7 @@ public sealed class InMemorySessionService : ISessionService
                     account.Balance
                 ))
                 .ToList(),
+            [],
             DateTimeOffset.UtcNow
         );
     }

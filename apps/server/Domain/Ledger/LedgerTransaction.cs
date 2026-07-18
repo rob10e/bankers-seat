@@ -3,7 +3,8 @@ namespace BankersSeat.Server.Domain.Ledger;
 public enum LedgerTransactionKind
 {
     Transfer = 0,
-    Correction = 1
+    Correction = 1,
+    Action = 2
 }
 
 public sealed record LedgerPosting(Guid AccountId, long Amount, long BalanceAfter);

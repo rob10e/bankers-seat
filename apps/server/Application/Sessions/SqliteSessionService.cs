@@ -104,12 +104,19 @@ public sealed class SqliteSessionService : ISessionService
             Balance = bankPolicy.StartingBankBalance,
             Version = 1
         };
+        var hostFieldValues = BuildDefaultPlayerFieldValueEntities(
+            sessionId,
+            hostParticipantId,
+            templateSnapshot.TemplateJson,
+            nowUtc
+        );
 
         dbContext.TemplateSnapshots.Add(snapshotEntity);
         dbContext.GameSessions.Add(sessionEntity);
         dbContext.Participants.Add(participantEntity);
         dbContext.Accounts.Add(accountEntity);
         dbContext.Accounts.Add(bankAccountEntity);
+        dbContext.PlayerFieldValues.AddRange(hostFieldValues);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -170,10 +177,17 @@ public sealed class SqliteSessionService : ISessionService
             Balance = templateSnapshot.StartingPlayerBalance,
             Version = 1
         };
+        var playerFieldValues = BuildDefaultPlayerFieldValueEntities(
+            sessionEntity.Id,
+            participant.Id,
+            templateSnapshot.TemplateJson,
+            DateTimeOffset.UtcNow
+        );
 
         sessionEntity.SessionVersion += 1;
         dbContext.Participants.Add(participant);
         dbContext.Accounts.Add(account);
+        dbContext.PlayerFieldValues.AddRange(playerFieldValues);
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -668,45 +682,84 @@ public sealed class SqliteSessionService : ISessionService
             record => record.Id == session.TemplateSnapshotId,
             cancellationToken
         );
-        var action = ResolveFinancialAction(snapshot.TemplateJson, normalizedActionId);
+        var action = ResolveTemplateAction(snapshot.TemplateJson, normalizedActionId);
         var policy = ParseBankPolicy(snapshot.TemplateJson, snapshot.AllowPlayerOverdraft);
-        var currentBalances = await dbContext.Accounts
-            .Where(record => record.SessionId == sessionId)
-            .ToDictionaryAsync(record => record.Id, record => record.Balance, cancellationToken);
         var nextSequence = await GetNextSequenceAsync(sessionId, cancellationToken);
         var note = string.IsNullOrWhiteSpace(request.Note)
             ? $"Action: {action.Label}"
             : request.Note.Trim();
+        var nowUtc = DateTimeOffset.UtcNow;
+        LedgerTransactionEntity transactionEntity;
+        LedgerTransactionViewResponse responseTransaction;
 
-        var instructions = await ResolveActionTransferInstructionsAsync(
-            sessionId,
-            action,
-            request,
-            policy,
-            cancellationToken
-        );
-
-        MoneyMutationResult mutation;
-        try
+        if (
+            action.OperationType is ActionOperationType.BankToPlayer
+                or ActionOperationType.PlayerToBank
+                or ActionOperationType.PlayerToPlayer
+        )
         {
-            mutation = MoneyMutationEngine.ApplyTransferBatch(
-                currentBalances,
+            var currentBalances = await dbContext.Accounts
+                .Where(record => record.SessionId == sessionId)
+                .ToDictionaryAsync(record => record.Id, record => record.Balance, cancellationToken);
+            var instructions = await ResolveActionTransferInstructionsAsync(
                 sessionId,
-                actorParticipantId,
-                instructions,
-                nextSequence,
-                DateTimeOffset.UtcNow,
-                note
+                action,
+                request,
+                policy,
+                cancellationToken
             );
-        }
-        catch (DomainRuleViolationException exception)
-        {
-            throw new InvalidOperationException(exception.Code);
-        }
 
-        await ApplyBalancesAsync(sessionId, mutation.UpdatedBalances, cancellationToken);
-        var transactionEntity = AddLedgerTransactionEntity(mutation.Transaction);
-        AddLedgerPostingEntities(sessionId, mutation.Transaction);
+            MoneyMutationResult mutation;
+            try
+            {
+                mutation = MoneyMutationEngine.ApplyTransferBatch(
+                    currentBalances,
+                    sessionId,
+                    actorParticipantId,
+                    instructions,
+                    nextSequence,
+                    nowUtc,
+                    note
+                );
+            }
+            catch (DomainRuleViolationException exception)
+            {
+                throw new InvalidOperationException(exception.Code);
+            }
+
+            await ApplyBalancesAsync(sessionId, mutation.UpdatedBalances, cancellationToken);
+            transactionEntity = AddLedgerTransactionEntity(mutation.Transaction);
+            AddLedgerPostingEntities(sessionId, mutation.Transaction);
+            responseTransaction = ToLedgerTransactionResponse(mutation.Transaction);
+        }
+        else if (action.OperationType is ActionOperationType.SetField or ActionOperationType.IncrementField)
+        {
+            await ApplyFieldActionAsync(
+                sessionId,
+                snapshot.TemplateJson,
+                action,
+                request,
+                nowUtc,
+                cancellationToken
+            );
+            var actionTransaction = new LedgerTransaction(
+                Guid.NewGuid(),
+                sessionId,
+                nextSequence,
+                actorParticipantId,
+                LedgerTransactionKind.Action,
+                null,
+                note,
+                nowUtc,
+                []
+            );
+            transactionEntity = AddLedgerTransactionEntity(actionTransaction);
+            responseTransaction = ToLedgerTransactionResponse(actionTransaction);
+        }
+        else
+        {
+            throw new InvalidOperationException("unsupported-template-action");
+        }
 
         session.SessionVersion += 1;
         var resultToken = transactionEntity.Id.ToString("N");
@@ -725,11 +778,7 @@ public sealed class SqliteSessionService : ISessionService
         await transaction.CommitAsync(cancellationToken);
 
         var updatedSnapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
-        return new MoneyCommandResponse(
-            updatedSnapshot,
-            ToLedgerTransactionResponse(mutation.Transaction),
-            IdempotentReplay: false
-        );
+        return new MoneyCommandResponse(updatedSnapshot, responseTransaction, IdempotentReplay: false);
     }
 
     public async Task<MoneyCommandResponse> CorrectTransactionAsync(
@@ -1172,7 +1221,136 @@ public sealed class SqliteSessionService : ISessionService
         return new BankPolicy(isUnlimited, allowPlayerOverdraft, startingBankBalance);
     }
 
-    private static ResolvedFinancialAction ResolveFinancialAction(string templateJson, string actionId)
+    private static IReadOnlyDictionary<string, PlayerFieldDefinition> ParsePlayerFieldDefinitions(
+        string templateJson
+    )
+    {
+        using var document = JsonDocument.Parse(templateJson);
+        var root = document.RootElement;
+        if (
+            !root.TryGetProperty("playerFields", out var playerFields)
+            || playerFields.ValueKind != JsonValueKind.Array
+        )
+        {
+            return new Dictionary<string, PlayerFieldDefinition>(StringComparer.Ordinal);
+        }
+
+        var result = new Dictionary<string, PlayerFieldDefinition>(StringComparer.Ordinal);
+        foreach (var field in playerFields.EnumerateArray())
+        {
+            if (
+                !field.TryGetProperty("id", out var idProperty)
+                || idProperty.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(idProperty.GetString())
+                || !field.TryGetProperty("type", out var typeProperty)
+                || typeProperty.ValueKind != JsonValueKind.String
+            )
+            {
+                throw new InvalidOperationException("invalid-template-snapshot");
+            }
+
+            var id = idProperty.GetString()!;
+            var type = typeProperty.GetString()!;
+            long? minimum = null;
+            long? maximum = null;
+            int? maximumLength = null;
+            var enumOptions = new HashSet<string>(StringComparer.Ordinal);
+            if (
+                field.TryGetProperty("minimum", out var minimumProperty)
+                && minimumProperty.ValueKind == JsonValueKind.Number
+                && minimumProperty.TryGetInt64(out var parsedMinimum)
+            )
+            {
+                minimum = parsedMinimum;
+            }
+
+            if (
+                field.TryGetProperty("maximum", out var maximumProperty)
+                && maximumProperty.ValueKind == JsonValueKind.Number
+                && maximumProperty.TryGetInt64(out var parsedMaximum)
+            )
+            {
+                maximum = parsedMaximum;
+            }
+
+            if (
+                field.TryGetProperty("maximumLength", out var maxLengthProperty)
+                && maxLengthProperty.ValueKind == JsonValueKind.Number
+                && maxLengthProperty.TryGetInt32(out var parsedMaxLength)
+            )
+            {
+                maximumLength = parsedMaxLength;
+            }
+
+            if (field.TryGetProperty("options", out var options) && options.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var option in options.EnumerateArray())
+                {
+                    if (
+                        option.TryGetProperty("value", out var valueProperty)
+                        && valueProperty.ValueKind == JsonValueKind.String
+                        && !string.IsNullOrWhiteSpace(valueProperty.GetString())
+                    )
+                    {
+                        enumOptions.Add(valueProperty.GetString()!);
+                    }
+                }
+            }
+
+            result[id] = new PlayerFieldDefinition(id, type, minimum, maximum, maximumLength, enumOptions);
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<PlayerFieldValueEntity> BuildDefaultPlayerFieldValueEntities(
+        Guid sessionId,
+        Guid participantId,
+        string templateJson,
+        DateTimeOffset updatedAtUtc
+    )
+    {
+        using var document = JsonDocument.Parse(templateJson);
+        var root = document.RootElement;
+        if (
+            !root.TryGetProperty("playerFields", out var playerFields)
+            || playerFields.ValueKind != JsonValueKind.Array
+        )
+        {
+            return [];
+        }
+
+        var entities = new List<PlayerFieldValueEntity>();
+        foreach (var field in playerFields.EnumerateArray())
+        {
+            if (
+                !field.TryGetProperty("id", out var idProperty)
+                || idProperty.ValueKind != JsonValueKind.String
+                || string.IsNullOrWhiteSpace(idProperty.GetString())
+                || !field.TryGetProperty("default", out var defaultProperty)
+            )
+            {
+                throw new InvalidOperationException("invalid-template-snapshot");
+            }
+
+            entities.Add(
+                new PlayerFieldValueEntity
+                {
+                    Id = Guid.NewGuid(),
+                    SessionId = sessionId,
+                    ParticipantId = participantId,
+                    FieldId = idProperty.GetString()!,
+                    ValueJson = defaultProperty.GetRawText(),
+                    Version = 1,
+                    UpdatedAtUtc = updatedAtUtc
+                }
+            );
+        }
+
+        return entities;
+    }
+
+    private static ResolvedTemplateAction ResolveTemplateAction(string templateJson, string actionId)
     {
         using var document = JsonDocument.Parse(templateJson);
         var root = document.RootElement;
@@ -1211,23 +1389,40 @@ public sealed class SqliteSessionService : ISessionService
             var scope = scopeProperty.GetString()!;
             return operationType switch
             {
-                "bank-to-player" => new ResolvedFinancialAction(
-                    FinancialActionOperationType.BankToPlayer,
+                "bank-to-player" => new ResolvedTemplateAction(
+                    ActionOperationType.BankToPlayer,
                     ReadActionAmount(operation),
                     label,
-                    scope
+                    scope,
+                    operation.Clone()
                 ),
-                "player-to-bank" => new ResolvedFinancialAction(
-                    FinancialActionOperationType.PlayerToBank,
+                "player-to-bank" => new ResolvedTemplateAction(
+                    ActionOperationType.PlayerToBank,
                     ReadActionAmount(operation),
                     label,
-                    scope
+                    scope,
+                    operation.Clone()
                 ),
-                "player-to-player" => new ResolvedFinancialAction(
-                    FinancialActionOperationType.PlayerToPlayer,
+                "player-to-player" => new ResolvedTemplateAction(
+                    ActionOperationType.PlayerToPlayer,
                     ReadActionAmount(operation),
                     label,
-                    scope
+                    scope,
+                    operation.Clone()
+                ),
+                "set-field" => new ResolvedTemplateAction(
+                    ActionOperationType.SetField,
+                    null,
+                    label,
+                    scope,
+                    operation.Clone()
+                ),
+                "increment-field" => new ResolvedTemplateAction(
+                    ActionOperationType.IncrementField,
+                    null,
+                    label,
+                    scope,
+                    operation.Clone()
                 ),
                 _ => throw new InvalidOperationException("unsupported-template-action")
             };
@@ -1253,12 +1448,17 @@ public sealed class SqliteSessionService : ISessionService
 
     private async Task<IReadOnlyList<TransferInstruction>> ResolveActionTransferInstructionsAsync(
         Guid sessionId,
-        ResolvedFinancialAction action,
+        ResolvedTemplateAction action,
         ExecuteTemplateActionRequest request,
         BankPolicy policy,
         CancellationToken cancellationToken
     )
     {
+        if (!action.Amount.HasValue)
+        {
+            throw new InvalidOperationException("invalid-template-snapshot");
+        }
+
         if (string.Equals(action.Scope, "single-player", StringComparison.Ordinal))
         {
             return await ResolveSinglePlayerActionInstructionsAsync(
@@ -1272,7 +1472,7 @@ public sealed class SqliteSessionService : ISessionService
 
         if (string.Equals(action.Scope, "two-players", StringComparison.Ordinal))
         {
-            if (action.OperationType != FinancialActionOperationType.PlayerToPlayer)
+            if (action.OperationType != ActionOperationType.PlayerToPlayer)
             {
                 throw new InvalidOperationException("unsupported-template-action");
             }
@@ -1291,7 +1491,7 @@ public sealed class SqliteSessionService : ISessionService
             throw new InvalidOperationException("unsupported-template-action");
         }
 
-        if (action.OperationType == FinancialActionOperationType.PlayerToPlayer)
+        if (action.OperationType == ActionOperationType.PlayerToPlayer)
         {
             throw new InvalidOperationException("unsupported-template-action");
         }
@@ -1308,19 +1508,19 @@ public sealed class SqliteSessionService : ISessionService
 
         return action.OperationType switch
         {
-            FinancialActionOperationType.BankToPlayer => participantAccounts
+            ActionOperationType.BankToPlayer => participantAccounts
                 .Select(account => new TransferInstruction(
                     bankAccount.Id,
                     account.Id,
-                    action.Amount,
+                    action.Amount.Value,
                     policy.IsUnlimitedBank
                 ))
                 .ToList(),
-            FinancialActionOperationType.PlayerToBank => participantAccounts
+            ActionOperationType.PlayerToBank => participantAccounts
                 .Select(account => new TransferInstruction(
                     account.Id,
                     bankAccount.Id,
-                    action.Amount,
+                    action.Amount.Value,
                     policy.AllowPlayerOverdraft
                 ))
                 .ToList(),
@@ -1330,7 +1530,7 @@ public sealed class SqliteSessionService : ISessionService
 
     private async Task<IReadOnlyList<TransferInstruction>> ResolveSinglePlayerActionInstructionsAsync(
         Guid sessionId,
-        ResolvedFinancialAction action,
+        ResolvedTemplateAction action,
         ExecuteTemplateActionRequest request,
         BankPolicy policy,
         CancellationToken cancellationToken
@@ -1342,7 +1542,7 @@ public sealed class SqliteSessionService : ISessionService
 
         switch (action.OperationType)
         {
-            case FinancialActionOperationType.BankToPlayer:
+            case ActionOperationType.BankToPlayer:
                 if (!request.PrimaryParticipantId.HasValue || request.PrimaryParticipantId.Value == Guid.Empty)
                 {
                     throw new InvalidOperationException("invalid-request");
@@ -1356,7 +1556,7 @@ public sealed class SqliteSessionService : ISessionService
                 );
                 allowFromOverdraft = policy.IsUnlimitedBank;
                 break;
-            case FinancialActionOperationType.PlayerToBank:
+            case ActionOperationType.PlayerToBank:
                 if (!request.PrimaryParticipantId.HasValue || request.PrimaryParticipantId.Value == Guid.Empty)
                 {
                     throw new InvalidOperationException("invalid-request");
@@ -1370,7 +1570,7 @@ public sealed class SqliteSessionService : ISessionService
                 toAccount = await FindBankAccountAsync(sessionId, cancellationToken);
                 allowFromOverdraft = policy.AllowPlayerOverdraft;
                 break;
-            case FinancialActionOperationType.PlayerToPlayer:
+            case ActionOperationType.PlayerToPlayer:
                 if (
                     !request.PrimaryParticipantId.HasValue
                     || request.PrimaryParticipantId.Value == Guid.Empty
@@ -1397,7 +1597,231 @@ public sealed class SqliteSessionService : ISessionService
                 throw new InvalidOperationException("unsupported-template-action");
         }
 
-        return [new TransferInstruction(fromAccount.Id, toAccount.Id, action.Amount, allowFromOverdraft)];
+        if (!action.Amount.HasValue)
+        {
+            throw new InvalidOperationException("invalid-template-snapshot");
+        }
+
+        return [new TransferInstruction(fromAccount.Id, toAccount.Id, action.Amount.Value, allowFromOverdraft)];
+    }
+
+    private async Task ApplyFieldActionAsync(
+        Guid sessionId,
+        string templateJson,
+        ResolvedTemplateAction action,
+        ExecuteTemplateActionRequest request,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            !action.Operation.TryGetProperty("fieldId", out var fieldIdProperty)
+            || fieldIdProperty.ValueKind != JsonValueKind.String
+            || string.IsNullOrWhiteSpace(fieldIdProperty.GetString())
+        )
+        {
+            throw new InvalidOperationException("invalid-template-snapshot");
+        }
+
+        var fieldId = fieldIdProperty.GetString()!;
+        var definitions = ParsePlayerFieldDefinitions(templateJson);
+        if (!definitions.TryGetValue(fieldId, out var definition))
+        {
+            throw new InvalidOperationException("action-field-reference-missing");
+        }
+
+        if (
+            action.OperationType == ActionOperationType.IncrementField
+            && definition.Type is not ("integer" or "counter" or "currency")
+        )
+        {
+            throw new InvalidOperationException("unsupported-template-action");
+        }
+
+        var targetParticipantIds = await ResolveFieldActionParticipantIdsAsync(
+            sessionId,
+            action.Scope,
+            request,
+            cancellationToken
+        );
+        if (targetParticipantIds.Count == 0)
+        {
+            throw new InvalidOperationException("invalid-request");
+        }
+
+        var fieldValues = await dbContext.PlayerFieldValues
+            .Where(record =>
+                record.SessionId == sessionId
+                && record.FieldId == fieldId
+                && targetParticipantIds.Contains(record.ParticipantId)
+            )
+            .ToDictionaryAsync(record => record.ParticipantId, cancellationToken);
+
+        foreach (var participantId in targetParticipantIds)
+        {
+            if (!fieldValues.TryGetValue(participantId, out var entity))
+            {
+                throw new InvalidOperationException("field-value-not-found");
+            }
+
+            var updatedValueJson = action.OperationType switch
+            {
+                ActionOperationType.SetField => ResolveSetFieldValueJson(action.Operation, definition),
+                ActionOperationType.IncrementField => ResolveIncrementedFieldValueJson(
+                    action.Operation,
+                    definition,
+                    entity.ValueJson
+                ),
+                _ => throw new InvalidOperationException("unsupported-template-action")
+            };
+
+            entity.ValueJson = updatedValueJson;
+            entity.Version += 1;
+            entity.UpdatedAtUtc = updatedAtUtc;
+        }
+    }
+
+    private async Task<IReadOnlyList<Guid>> ResolveFieldActionParticipantIdsAsync(
+        Guid sessionId,
+        string scope,
+        ExecuteTemplateActionRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (string.Equals(scope, "single-player", StringComparison.Ordinal))
+        {
+            if (!request.PrimaryParticipantId.HasValue || request.PrimaryParticipantId.Value == Guid.Empty)
+            {
+                throw new InvalidOperationException("invalid-request");
+            }
+
+            return [request.PrimaryParticipantId.Value];
+        }
+
+        if (string.Equals(scope, "all-players", StringComparison.Ordinal))
+        {
+            return await dbContext.Participants
+                .Where(record => record.SessionId == sessionId)
+                .OrderBy(record => record.JoinOrder)
+                .Select(record => record.Id)
+                .ToListAsync(cancellationToken);
+        }
+
+        throw new InvalidOperationException("unsupported-template-action");
+    }
+
+    private static string ResolveSetFieldValueJson(JsonElement operation, PlayerFieldDefinition definition)
+    {
+        if (!operation.TryGetProperty("value", out var value))
+        {
+            throw new InvalidOperationException("invalid-template-snapshot");
+        }
+
+        return ValidateAndNormalizeFieldValueJson(definition, value);
+    }
+
+    private static string ResolveIncrementedFieldValueJson(
+        JsonElement operation,
+        PlayerFieldDefinition definition,
+        string currentValueJson
+    )
+    {
+        if (
+            !operation.TryGetProperty("amount", out var amountProperty)
+            || amountProperty.ValueKind != JsonValueKind.Number
+            || !amountProperty.TryGetInt64(out var amount)
+        )
+        {
+            throw new InvalidOperationException("invalid-template-snapshot");
+        }
+
+        using var currentDocument = JsonDocument.Parse(currentValueJson);
+        var currentValue = currentDocument.RootElement;
+        if (currentValue.ValueKind != JsonValueKind.Number || !currentValue.TryGetInt64(out var current))
+        {
+            throw new InvalidOperationException("field-value-invalid");
+        }
+
+        var updated = checked(current + amount);
+        if (definition.Minimum.HasValue && updated < definition.Minimum.Value)
+        {
+            throw new InvalidOperationException("field-value-out-of-range");
+        }
+
+        if (definition.Maximum.HasValue && updated > definition.Maximum.Value)
+        {
+            throw new InvalidOperationException("field-value-out-of-range");
+        }
+
+        return JsonSerializer.Serialize(updated);
+    }
+
+    private static string ValidateAndNormalizeFieldValueJson(
+        PlayerFieldDefinition definition,
+        JsonElement value
+    )
+    {
+        return definition.Type switch
+        {
+            "boolean" when value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False =>
+                value.GetRawText(),
+            "text" => ValidateTextFieldValue(definition, value),
+            "enum" => ValidateEnumFieldValue(definition, value),
+            "integer" or "counter" or "currency" => ValidateNumericFieldValue(definition, value),
+            _ => throw new InvalidOperationException("unsupported-template-action")
+        };
+    }
+
+    private static string ValidateTextFieldValue(PlayerFieldDefinition definition, JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException("field-value-type-mismatch");
+        }
+
+        var text = value.GetString() ?? string.Empty;
+        if (definition.MaximumLength.HasValue && text.Length > definition.MaximumLength.Value)
+        {
+            throw new InvalidOperationException("field-value-out-of-range");
+        }
+
+        return JsonSerializer.Serialize(text);
+    }
+
+    private static string ValidateEnumFieldValue(PlayerFieldDefinition definition, JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException("field-value-type-mismatch");
+        }
+
+        var selected = value.GetString() ?? string.Empty;
+        if (!definition.EnumOptions.Contains(selected))
+        {
+            throw new InvalidOperationException("field-value-invalid-option");
+        }
+
+        return JsonSerializer.Serialize(selected);
+    }
+
+    private static string ValidateNumericFieldValue(PlayerFieldDefinition definition, JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var numeric))
+        {
+            throw new InvalidOperationException("field-value-type-mismatch");
+        }
+
+        if (definition.Minimum.HasValue && numeric < definition.Minimum.Value)
+        {
+            throw new InvalidOperationException("field-value-out-of-range");
+        }
+
+        if (definition.Maximum.HasValue && numeric > definition.Maximum.Value)
+        {
+            throw new InvalidOperationException("field-value-out-of-range");
+        }
+
+        return JsonSerializer.Serialize(numeric);
     }
 
     private async Task<long> GetNextSequenceAsync(Guid sessionId, CancellationToken cancellationToken)
@@ -1499,6 +1923,7 @@ public sealed class SqliteSessionService : ISessionService
         {
             "transfer" => LedgerTransactionKind.Transfer,
             "correction" => LedgerTransactionKind.Correction,
+            "action" => LedgerTransactionKind.Action,
             _ => throw new InvalidOperationException("invalid-ledger-kind")
         };
     }
@@ -1587,6 +2012,11 @@ public sealed class SqliteSessionService : ISessionService
         var accounts = await dbContext.Accounts
             .Where(record => record.SessionId == sessionId)
             .ToListAsync(cancellationToken);
+        var playerFieldValues = await dbContext.PlayerFieldValues
+            .Where(record => record.SessionId == sessionId)
+            .OrderBy(record => record.ParticipantId)
+            .ThenBy(record => record.FieldId)
+            .ToListAsync(cancellationToken);
 
         return new SessionSnapshotResponse(
             session.Id,
@@ -1615,6 +2045,11 @@ public sealed class SqliteSessionService : ISessionService
                 record.OwnerId,
                 record.OwnerType,
                 record.Balance
+            )).ToList(),
+            playerFieldValues.Select(record => new PlayerFieldValueViewResponse(
+                record.ParticipantId,
+                record.FieldId,
+                record.ValueJson
             )).ToList(),
             DateTimeOffset.UtcNow
         );
@@ -1645,17 +2080,29 @@ public sealed class SqliteSessionService : ISessionService
         long StartingBankBalance
     );
 
-    private sealed record ResolvedFinancialAction(
-        FinancialActionOperationType OperationType,
-        long Amount,
+    private sealed record ResolvedTemplateAction(
+        ActionOperationType OperationType,
+        long? Amount,
         string Label,
-        string Scope
+        string Scope,
+        JsonElement Operation
     );
 
-    private enum FinancialActionOperationType
+    private sealed record PlayerFieldDefinition(
+        string Id,
+        string Type,
+        long? Minimum,
+        long? Maximum,
+        int? MaximumLength,
+        ISet<string> EnumOptions
+    );
+
+    private enum ActionOperationType
     {
         BankToPlayer,
         PlayerToBank,
-        PlayerToPlayer
+        PlayerToPlayer,
+        SetField,
+        IncrementField
     }
 }

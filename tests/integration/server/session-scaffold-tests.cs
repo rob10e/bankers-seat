@@ -932,6 +932,99 @@ public sealed class SessionScaffoldTests
         }
 
         [Fact]
+        public async Task SnapshotIncludesDefaultPlayerFieldValuesForParticipants()
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, catalogService);
+            var created = await sessionService.CreateSessionAsync(
+                new CreateSessionRequest(
+                    "generic-life-journey",
+                    "family-edition",
+                    "1.0.0",
+                    "Host",
+                    new Dictionary<string, System.Text.Json.JsonElement>()
+                ),
+                CancellationToken.None
+            );
+            var joined = await sessionService.JoinSessionAsync(
+                new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                CancellationToken.None
+            );
+
+            var snapshot = await sessionService.GetAuthorizedSnapshotAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                CancellationToken.None
+            );
+
+            var hostChildrenField = snapshot.PlayerFieldValues.Single(value =>
+                value.ParticipantId == created.HostParticipantId && value.FieldId == "children-count"
+            );
+            var joinedChildrenField = snapshot.PlayerFieldValues.Single(value =>
+                value.ParticipantId == joined.ParticipantId && value.FieldId == "children-count"
+            );
+            Assert.Equal("0", hostChildrenField.ValueJson);
+            Assert.Equal("0", joinedChildrenField.ValueJson);
+            Assert.Equal(8, snapshot.PlayerFieldValues.Count);
+        }
+
+        [Fact]
+        public async Task ExecuteTemplateActionAppliesIncrementFieldOperation()
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, catalogService);
+            var created = await sessionService.CreateSessionAsync(
+                new CreateSessionRequest(
+                    "generic-life-journey",
+                    "family-edition",
+                    "1.0.0",
+                    "Host",
+                    new Dictionary<string, System.Text.Json.JsonElement>()
+                ),
+                CancellationToken.None
+            );
+            var joined = await sessionService.JoinSessionAsync(
+                new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                CancellationToken.None
+            );
+
+            var response = await sessionService.ExecuteTemplateActionAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                "new-child",
+                new ExecuteTemplateActionRequest(
+                    joined.ParticipantId,
+                    null,
+                    ExpectedSessionVersion: 2,
+                    IdempotencyKey: "field-action-1",
+                    Note: string.Empty
+                ),
+                CancellationToken.None
+            );
+
+            var joinedChildrenField = response.Snapshot.PlayerFieldValues.Single(value =>
+                value.ParticipantId == joined.ParticipantId && value.FieldId == "children-count"
+            );
+            Assert.Equal("1", joinedChildrenField.ValueJson);
+            Assert.Equal("action", response.Transaction.Kind);
+            Assert.Empty(response.Transaction.Postings);
+        }
+
+        [Fact]
         public async Task ExecuteTemplateActionSupportsAllPlayersScopeForBankPayments()
         {
             var tempTemplatesRoot = CreateTempTemplatesRoot();

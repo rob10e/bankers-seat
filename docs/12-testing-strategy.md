@@ -10,6 +10,7 @@
 - Integration tests for bank-payment and bank-collection command paths, including account-balance effects on player and bank accounts (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for template financial action execution, including action-driven bank/player balance changes and unsupported operation rejection (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for template action scope handling, including `all-players` bank payments and `two-players` player-to-player transfers (`tests/integration/server/session-scaffold-tests.cs`).
+- Integration tests for player field defaults and template `increment-field` action execution behavior (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for authorized ledger retrieval with newest-first pagination and unauthorized access rejection (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for authorized session export retrieval and unauthorized export rejection (`tests/integration/server/session-scaffold-tests.cs`).
 - Template schema and semantic validation CLI via `pnpm templates:validate`.

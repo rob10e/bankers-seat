@@ -10,6 +10,7 @@ public sealed record SessionSnapshotResponse(
     TemplateSnapshotViewResponse Template,
     IReadOnlyList<ParticipantViewResponse> Participants,
     IReadOnlyList<AccountViewResponse> Accounts,
+    IReadOnlyList<PlayerFieldValueViewResponse> PlayerFieldValues,
     DateTimeOffset ServerTimeUtc
 );
 
@@ -35,4 +36,10 @@ public sealed record AccountViewResponse(
     Guid OwnerId,
     string OwnerType,
     long Balance
+);
+
+public sealed record PlayerFieldValueViewResponse(
+    Guid ParticipantId,
+    string FieldId,
+    string ValueJson
 );

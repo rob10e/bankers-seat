@@ -22,6 +22,8 @@ public sealed class BankersSeatDbContext : DbContext
 
     public DbSet<LedgerPostingEntity> LedgerPostings => Set<LedgerPostingEntity>();
 
+    public DbSet<PlayerFieldValueEntity> PlayerFieldValues => Set<PlayerFieldValueEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<GameSessionEntity>(entity =>
@@ -102,6 +104,17 @@ public sealed class BankersSeatDbContext : DbContext
             entity.HasKey(record => record.Id);
             entity.HasIndex(record => new { record.TransactionId, record.Id });
             entity.HasIndex(record => new { record.SessionId, record.AccountId });
+        });
+
+        modelBuilder.Entity<PlayerFieldValueEntity>(entity =>
+        {
+            entity.ToTable("player_field_values");
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.FieldId).HasMaxLength(100).IsRequired();
+            entity.Property(record => record.ValueJson).IsRequired();
+            entity.Property(record => record.Version).IsConcurrencyToken();
+            entity.HasIndex(record => new { record.SessionId, record.ParticipantId, record.FieldId }).IsUnique();
+            entity.HasIndex(record => new { record.SessionId, record.ParticipantId });
         });
     }
 }

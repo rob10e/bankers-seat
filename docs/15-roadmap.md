@@ -16,13 +16,14 @@
 - Financial command handlers for participant transfers and transaction corrections with idempotency, version checks, host authorization, and immutable ledger persistence.
 - Bank-payment and bank-collection command handlers with transactional balance updates and immutable ledger postings.
 - Template financial action execution handler for declarative `bank-to-player`, `player-to-bank`, and `player-to-player` operations with idempotency and immutable ledger postings.
+- Template field action execution support for `set-field` and `increment-field`, with persisted player field values in authorized snapshots.
 - Integration tests for transfer/correction command paths including replay, stale-version rejection, and duplicate-correction protection.
 - Authorized ledger read endpoint with cursor-style pagination over persisted immutable transactions/postings.
 - Authorized session export endpoint returning snapshot plus full immutable ledger history.
 
 ### Still pending in immediate roadmap
 
-- Full template action execution coverage beyond current support (field updates and composite/multi-step actions).
+- Full template action execution coverage beyond current support (composite/multi-step actions).
 
 ## Phase 0 — Foundation and validation
 
