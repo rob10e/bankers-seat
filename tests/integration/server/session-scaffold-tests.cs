@@ -10,11 +10,10 @@ namespace BankersSeat.Server.Tests.Integration;
 
 public sealed class SessionScaffoldTests
 {
-    private readonly FileTemplateCatalogService catalogService = new(
-        Path.GetFullPath(
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "templates")
-        )
+    private static readonly string TemplatesRoot = Path.GetFullPath(
+        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "templates")
     );
+    private readonly FileTemplateCatalogService catalogService = new(TemplatesRoot);
 
     [Fact]
     public async Task TemplateCatalogContainsSampleTemplates()
@@ -61,5 +60,93 @@ public sealed class SessionScaffoldTests
         Assert.Single(await dbContext.TemplateSnapshots.ToListAsync());
         Assert.Single(await dbContext.Participants.ToListAsync());
         Assert.Single(await dbContext.Accounts.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ExistingSessionSnapshotRemainsStableAfterTemplateFileChanges()
+    {
+        var tempTemplatesRoot = Path.Combine(
+            Path.GetTempPath(),
+            $"bankers-seat-templates-{Guid.NewGuid():N}"
+        );
+        var sourceTemplateDir = Path.Combine(TemplatesRoot, "samples", "generic-property-trading");
+        var targetTemplateDir = Path.Combine(tempTemplatesRoot, "samples", "generic-property-trading");
+        Directory.CreateDirectory(targetTemplateDir);
+
+        var sourceTemplatePath = Path.Combine(sourceTemplateDir, "template.json");
+        var targetTemplatePath = Path.Combine(targetTemplateDir, "template.json");
+        File.Copy(sourceTemplatePath, targetTemplatePath, overwrite: true);
+
+        try
+        {
+            var isolatedCatalog = new FileTemplateCatalogService(tempTemplatesRoot);
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, isolatedCatalog);
+            var request = new CreateSessionRequest(
+                "generic-property-trading",
+                "standard-edition",
+                "1.0.0",
+                "Host",
+                new Dictionary<string, System.Text.Json.JsonElement>()
+            );
+
+            var firstSession = await sessionService.CreateSessionAsync(request, CancellationToken.None);
+            var firstSnapshot = await sessionService.GetAuthorizedSnapshotAsync(
+                firstSession.SessionId,
+                firstSession.HostParticipantId,
+                firstSession.ReconnectCredential,
+                CancellationToken.None
+            );
+            var firstHostAccount = firstSnapshot.Accounts.Single(account =>
+                account.OwnerId == firstSession.HostParticipantId
+            );
+
+            var originalTemplateJson = await File.ReadAllTextAsync(targetTemplatePath);
+            var updatedTemplateJson = originalTemplateJson.Replace(
+                "\"startingPlayerBalance\": 1500",
+                "\"startingPlayerBalance\": 2500",
+                StringComparison.Ordinal
+            );
+            Assert.NotEqual(originalTemplateJson, updatedTemplateJson);
+            await File.WriteAllTextAsync(targetTemplatePath, updatedTemplateJson);
+
+            var firstSnapshotAfterChange = await sessionService.GetAuthorizedSnapshotAsync(
+                firstSession.SessionId,
+                firstSession.HostParticipantId,
+                firstSession.ReconnectCredential,
+                CancellationToken.None
+            );
+            var firstHostAccountAfterChange = firstSnapshotAfterChange.Accounts.Single(account =>
+                account.OwnerId == firstSession.HostParticipantId
+            );
+            Assert.Equal(firstSnapshot.Template.SnapshotId, firstSnapshotAfterChange.Template.SnapshotId);
+            Assert.Equal(firstSnapshot.Template.ContentHash, firstSnapshotAfterChange.Template.ContentHash);
+            Assert.Equal(firstHostAccount.Balance, firstHostAccountAfterChange.Balance);
+            Assert.Equal(1500, firstHostAccountAfterChange.Balance);
+
+            var secondSession = await sessionService.CreateSessionAsync(request, CancellationToken.None);
+            var secondHostAccount = secondSession.InitialSnapshot.Accounts.Single(account =>
+                account.OwnerId == secondSession.HostParticipantId
+            );
+
+            Assert.NotEqual(
+                firstSnapshot.Template.ContentHash,
+                secondSession.InitialSnapshot.Template.ContentHash
+            );
+            Assert.Equal(2500, secondHostAccount.Balance);
+        }
+        finally
+        {
+            if (Directory.Exists(tempTemplatesRoot))
+            {
+                Directory.Delete(tempTemplatesRoot, recursive: true);
+            }
+        }
     }
 }

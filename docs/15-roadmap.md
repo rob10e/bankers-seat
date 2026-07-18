@@ -5,11 +5,12 @@
 ### Completed now
 
 - Monorepo scaffold (`apps/web`, `apps/server`, `packages/*`, `tests/*`) with pnpm workspace and .NET solution.
-- Web UI scaffold with mobile-first shell and routed screens for template catalog, host setup, join, and game workspace.
+- Web UI scaffold with responsive desktop/mobile navigation, settings, theme mode support, and routed screens for template catalog, host setup, join, and game workspace.
 - Backend scaffold with versioned `/api/v1` controllers, in-memory session service, template catalog loading, and SignalR hub path.
 - Frontend/backend integration for template listing, create session, join session, and snapshot retrieval.
 - Template validator CLI and root command `pnpm templates:validate`.
 - SQLite persistence baseline with EF Core `DbContext`, checked-in migration, and persisted sessions/participants/accounts/template snapshots.
+- Template validation test suite and integration coverage for active-session template snapshot immutability.
 
 ### Still pending in immediate roadmap
 

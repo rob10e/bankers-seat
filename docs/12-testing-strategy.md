@@ -1,10 +1,11 @@
 # Testing Strategy
 
-## Current baseline coverage (2026-07-17)
+## Current baseline coverage (2026-07-18)
 
 - Web smoke test covering routed app shell render (`apps/web/src/app/app.test.tsx`).
-- Integration tests for template catalog discovery and session snapshot creation (`tests/integration/server/session-scaffold-tests.cs`).
-- Template schema and semantic validation via `pnpm templates:validate`.
+- Template validation unit tests covering schema, semantic rules, discovery, and JSON parsing (`packages/template-tools/src/validation.test.ts`).
+- Integration tests for template catalog discovery, session snapshot persistence, and active-session snapshot stability after source template edits (`tests/integration/server/session-scaffold-tests.cs`).
+- Template schema and semantic validation CLI via `pnpm templates:validate`.
 
 ## Quality objectives
 
