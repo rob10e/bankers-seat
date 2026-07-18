@@ -1,0 +1,20 @@
+{
+  "name": "bankers-seat",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Browser-first multiplayer banker and session record keeper for tabletop games.",
+  "packageManager": "pnpm@11.13.1",
+  "scripts": {
+    "dev": "pnpm run dev:web",
+    "dev:web": "pnpm --filter @bankers-seat/web dev",
+    "dev:server": "dotnet run --project apps/server --launch-profile http",
+    "debug:web": "pnpm --filter @bankers-seat/web dev --host 0.0.0.0 --port 5173",
+    "debug:server": "dotnet watch --project apps/server run --launch-profile http",
+    "templates:validate": "pnpm --filter @bankers-seat/template-tools run validate",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r --filter \"!@bankers-seat/e2e\" test",
+    "test:e2e": "pnpm --filter @bankers-seat/e2e test",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

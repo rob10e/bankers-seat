@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Debug Full Stack" type="CompoundRunConfigurationType" factoryName="Compound">
+    <toRun name="Debug Server (.NET)" type="js.build_tools.npm" />
+    <toRun name="Debug Web (Vite)" type="js.build_tools.npm" />
+    <method v="2" />
+  </configuration>
+</component>

@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "templateId": "generic-property-trading",
+  "templateVersion": "1.0.0",
+  "name": "Property Trading Banker",
+  "description": "An original generic template for property-trading board games.",
+  "edition": {
+    "id": "standard-edition",
+    "name": "Standard Edition",
+    "releaseLabel": "Generic sample",
+    "year": 2026
+  },
+  "playerCount": {
+    "minimum": 2,
+    "maximum": 8
+  },
+  "currency": {
+    "code": "PROPERTY_CREDIT",
+    "symbol": "\u00a4",
+    "name": "credits",
+    "baseUnitName": "credit",
+    "fractionDigits": 0,
+    "position": "before"
+  },
+  "denominations": [
+    {
+      "value": 1,
+      "label": "1"
+    },
+    {
+      "value": 5,
+      "label": "5"
+    },
+    {
+      "value": 10,
+      "label": "10"
+    },
+    {
+      "value": 20,
+      "label": "20"
+    },
+    {
+      "value": 50,
+      "label": "50"
+    },
+    {
+      "value": 100,
+      "label": "100"
+    },
+    {
+      "value": 500,
+      "label": "500"
+    }
+  ],
+  "bank": {
+    "startingPlayerBalance": 1500,
+    "bankMode": "unlimited",
+    "allowPlayerOverdraft": false
+  },
+  "playerFields": [
+    {
+      "id": "properties-owned",
+      "label": "Properties owned",
+      "type": "counter",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 100,
+      "step": 1,
+      "visibility": "all",
+      "editableBy": "host-and-owner"
+    },
+    {
+      "id": "houses-owned",
+      "label": "Houses owned",
+      "type": "counter",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 100,
+      "step": 1,
+      "visibility": "all",
+      "editableBy": "host-and-owner"
+    },
+    {
+      "id": "hotels-owned",
+      "label": "Hotels owned",
+      "type": "counter",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 50,
+      "step": 1,
+      "visibility": "all",
+      "editableBy": "host-and-owner"
+    }
+  ],
+  "actions": [
+    {
+      "id": "standard-income",
+      "label": "Standard income",
+      "description": "Pay the selected player a common income amount.",
+      "category": "income",
+      "scope": "single-player",
+      "operation": {
+        "type": "bank-to-player",
+        "amount": 200
+      },
+      "confirmation": "never"
+    },
+    {
+      "id": "standard-fee",
+      "label": "Standard fee",
+      "category": "expense",
+      "scope": "single-player",
+      "operation": {
+        "type": "player-to-bank",
+        "amount": 50
+      },
+      "confirmation": "always"
+    }
+  ],
+  "sessionOptions": [
+    {
+      "id": "starting-balance",
+      "label": "Starting balance",
+      "type": "integer",
+      "default": 1500,
+      "minimum": 0,
+      "maximum": 100000,
+      "mapsTo": "bank.startingPlayerBalance"
+    },
+    {
+      "id": "allow-overdraft",
+      "label": "Allow negative balances",
+      "type": "boolean",
+      "default": false,
+      "mapsTo": "bank.allowPlayerOverdraft"
+    }
+  ],
+  "tags": [
+    "property",
+    "trading",
+    "money",
+    "generic"
+  ]
+}

@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "templateId": "generic-life-journey",
+  "templateVersion": "1.0.0",
+  "name": "Life Journey Banker",
+  "description": "An original generic template for life-event and career-journey board games.",
+  "edition": {
+    "id": "family-edition",
+    "name": "Family Edition",
+    "releaseLabel": "Generic sample",
+    "year": 2026
+  },
+  "playerCount": {
+    "minimum": 2,
+    "maximum": 10
+  },
+  "currency": {
+    "code": "LIFE_CREDIT",
+    "symbol": "\u00a4",
+    "name": "credits",
+    "baseUnitName": "credit",
+    "fractionDigits": 0,
+    "position": "before"
+  },
+  "denominations": [
+    {
+      "value": 1000,
+      "label": "1K"
+    },
+    {
+      "value": 5000,
+      "label": "5K"
+    },
+    {
+      "value": 10000,
+      "label": "10K"
+    },
+    {
+      "value": 50000,
+      "label": "50K"
+    }
+  ],
+  "bank": {
+    "startingPlayerBalance": 10000,
+    "bankMode": "unlimited",
+    "allowPlayerOverdraft": true
+  },
+  "playerFields": [
+    {
+      "id": "owns-home",
+      "label": "Owns a home",
+      "type": "boolean",
+      "default": false,
+      "visibility": "all",
+      "editableBy": "host-and-owner"
+    },
+    {
+      "id": "children-count",
+      "label": "Children",
+      "type": "counter",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 12,
+      "step": 1,
+      "visibility": "all",
+      "editableBy": "host-and-owner"
+    },
+    {
+      "id": "career",
+      "label": "Career",
+      "type": "enum",
+      "default": "none",
+      "options": [
+        {
+          "value": "none",
+          "label": "None"
+        },
+        {
+          "value": "technical",
+          "label": "Technical"
+        },
+        {
+          "value": "creative",
+          "label": "Creative"
+        },
+        {
+          "value": "service",
+          "label": "Service"
+        }
+      ],
+      "visibility": "all",
+      "editableBy": "host"
+    },
+    {
+      "id": "salary",
+      "label": "Salary",
+      "type": "currency",
+      "default": 10000,
+      "minimum": 0,
+      "maximum": 1000000,
+      "step": 1000,
+      "visibility": "all",
+      "editableBy": "host"
+    }
+  ],
+  "actions": [
+    {
+      "id": "payday",
+      "label": "Payday",
+      "description": "Apply a standard payday to the selected player.",
+      "category": "income",
+      "scope": "single-player",
+      "operation": {
+        "type": "bank-to-player",
+        "amount": 10000
+      },
+      "confirmation": "never"
+    },
+    {
+      "id": "new-child",
+      "label": "Add child",
+      "category": "life-event",
+      "scope": "single-player",
+      "operation": {
+        "type": "increment-field",
+        "fieldId": "children-count",
+        "amount": 1
+      },
+      "confirmation": "never"
+    },
+    {
+      "id": "buy-home",
+      "label": "Buy home",
+      "category": "life-event",
+      "scope": "single-player",
+      "operation": {
+        "type": "composite",
+        "atomic": true,
+        "steps": [
+          {
+            "type": "player-to-bank",
+            "amount": 50000
+          },
+          {
+            "type": "set-field",
+            "fieldId": "owns-home",
+            "value": true
+          }
+        ]
+      },
+      "confirmation": "always"
+    }
+  ],
+  "sessionOptions": [
+    {
+      "id": "starting-balance",
+      "label": "Starting balance",
+      "type": "integer",
+      "default": 10000,
+      "minimum": -100000,
+      "maximum": 1000000,
+      "mapsTo": "bank.startingPlayerBalance"
+    },
+    {
+      "id": "allow-overdraft",
+      "label": "Allow negative balances",
+      "type": "boolean",
+      "default": true,
+      "mapsTo": "bank.allowPlayerOverdraft"
+    }
+  ],
+  "tags": [
+    "life",
+    "career",
+    "family",
+    "payday",
+    "generic"
+  ]
+}

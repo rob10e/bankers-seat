@@ -1,0 +1,836 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/game-template.schema.json",
+  "title": "Board Game Banker Template",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "templateId",
+    "templateVersion",
+    "name",
+    "edition",
+    "playerCount",
+    "currency",
+    "bank"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "templateId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 100
+    },
+    "templateVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "edition": {
+      "$ref": "#/$defs/edition"
+    },
+    "playerCount": {
+      "$ref": "#/$defs/playerCount"
+    },
+    "currency": {
+      "$ref": "#/$defs/currency"
+    },
+    "denominations": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "#/$defs/denomination"
+      }
+    },
+    "bank": {
+      "$ref": "#/$defs/bank"
+    },
+    "assets": {
+      "$ref": "#/$defs/assets"
+    },
+    "playerFields": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/playerField"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    },
+    "sessionOptions": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "#/$defs/sessionOption"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "maxItems": 30,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 100
+    },
+    "relativeAssetPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!\\\\)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$"
+    },
+    "edition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "releaseLabel": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "year": {
+          "type": "integer",
+          "minimum": 1800,
+          "maximum": 3000
+        }
+      }
+    },
+    "playerCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum",
+        "maximum"
+      ],
+      "properties": {
+        "minimum": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "maximum": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      }
+    },
+    "currency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "symbol",
+        "name",
+        "baseUnitName",
+        "fractionDigits",
+        "position"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{1,19}$"
+        },
+        "symbol": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "baseUnitName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "fractionDigits": {
+          "type": "integer",
+          "const": 0
+        },
+        "position": {
+          "type": "string",
+          "enum": [
+            "before",
+            "after"
+          ]
+        }
+      }
+    },
+    "denomination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "label"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        },
+        "asset": {
+          "$ref": "#/$defs/relativeAssetPath"
+        }
+      }
+    },
+    "bank": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "startingPlayerBalance",
+        "bankMode",
+        "allowPlayerOverdraft"
+      ],
+      "properties": {
+        "startingPlayerBalance": {
+          "type": "integer"
+        },
+        "bankMode": {
+          "type": "string",
+          "enum": [
+            "unlimited",
+            "finite"
+          ]
+        },
+        "startingBankBalance": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allowPlayerOverdraft": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "bankMode": {
+                "const": "finite"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "startingBankBalance"
+            ]
+          }
+        }
+      ]
+    },
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "logo": {
+          "$ref": "#/$defs/relativeAssetPath"
+        },
+        "thumbnail": {
+          "$ref": "#/$defs/relativeAssetPath"
+        },
+        "background": {
+          "$ref": "#/$defs/relativeAssetPath"
+        },
+        "images": {
+          "type": "object",
+          "maxProperties": 100,
+          "propertyNames": {
+            "$ref": "#/$defs/id"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/relativeAssetPath"
+          }
+        }
+      }
+    },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "all",
+        "owner-and-host",
+        "host-only"
+      ]
+    },
+    "editableBy": {
+      "type": "string",
+      "enum": [
+        "host",
+        "owner",
+        "host-and-owner",
+        "system"
+      ]
+    },
+    "fieldBase": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "type",
+        "visibility",
+        "editableBy"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "editableBy": {
+          "$ref": "#/$defs/editableBy"
+        },
+        "iconAssetKey": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "booleanField": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/fieldBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "label",
+            "type",
+            "default",
+            "visibility",
+            "editableBy"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "type": {
+              "const": "boolean"
+            },
+            "default": {
+              "type": "boolean"
+            },
+            "visibility": {
+              "$ref": "#/$defs/visibility"
+            },
+            "editableBy": {
+              "$ref": "#/$defs/editableBy"
+            },
+            "iconAssetKey": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        }
+      ]
+    },
+    "numericField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "type",
+        "default",
+        "visibility",
+        "editableBy"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "integer",
+            "counter",
+            "currency"
+          ]
+        },
+        "default": {
+          "type": "integer"
+        },
+        "minimum": {
+          "type": "integer"
+        },
+        "maximum": {
+          "type": "integer"
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "editableBy": {
+          "$ref": "#/$defs/editableBy"
+        },
+        "iconAssetKey": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "textField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "type",
+        "default",
+        "visibility",
+        "editableBy"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "type": {
+          "const": "text"
+        },
+        "default": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "maximumLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "editableBy": {
+          "$ref": "#/$defs/editableBy"
+        },
+        "iconAssetKey": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "enumOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "label"
+      ],
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "enumField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "type",
+        "default",
+        "options",
+        "visibility",
+        "editableBy"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "type": {
+          "const": "enum"
+        },
+        "default": {
+          "$ref": "#/$defs/id"
+        },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 25,
+          "items": {
+            "$ref": "#/$defs/enumOption"
+          }
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "editableBy": {
+          "$ref": "#/$defs/editableBy"
+        },
+        "iconAssetKey": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "playerField": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/booleanField"
+        },
+        {
+          "$ref": "#/$defs/numericField"
+        },
+        {
+          "$ref": "#/$defs/textField"
+        },
+        {
+          "$ref": "#/$defs/enumField"
+        }
+      ]
+    },
+    "bankToPlayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "amount"
+      ],
+      "properties": {
+        "type": {
+          "const": "bank-to-player"
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "playerToBank": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "amount"
+      ],
+      "properties": {
+        "type": {
+          "const": "player-to-bank"
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "playerToPlayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "amount"
+      ],
+      "properties": {
+        "type": {
+          "const": "player-to-player"
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "adjustBalance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "amount"
+      ],
+      "properties": {
+        "type": {
+          "const": "adjust-player-balance"
+        },
+        "amount": {
+          "type": "integer"
+        }
+      }
+    },
+    "setField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "fieldId",
+        "value"
+      ],
+      "properties": {
+        "type": {
+          "const": "set-field"
+        },
+        "fieldId": {
+          "$ref": "#/$defs/id"
+        },
+        "value": {}
+      }
+    },
+    "incrementField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "fieldId",
+        "amount"
+      ],
+      "properties": {
+        "type": {
+          "const": "increment-field"
+        },
+        "fieldId": {
+          "$ref": "#/$defs/id"
+        },
+        "amount": {
+          "type": "integer"
+        }
+      }
+    },
+    "simpleOperation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/bankToPlayer"
+        },
+        {
+          "$ref": "#/$defs/playerToBank"
+        },
+        {
+          "$ref": "#/$defs/playerToPlayer"
+        },
+        {
+          "$ref": "#/$defs/adjustBalance"
+        },
+        {
+          "$ref": "#/$defs/setField"
+        },
+        {
+          "$ref": "#/$defs/incrementField"
+        }
+      ]
+    },
+    "composite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "steps",
+        "atomic"
+      ],
+      "properties": {
+        "type": {
+          "const": "composite"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/simpleOperation"
+          }
+        },
+        "atomic": {
+          "type": "boolean"
+        }
+      }
+    },
+    "operation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/simpleOperation"
+        },
+        {
+          "$ref": "#/$defs/composite"
+        }
+      ]
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "category",
+        "scope",
+        "operation",
+        "confirmation"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "category": {
+          "$ref": "#/$defs/id"
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "single-player",
+            "all-players",
+            "two-players"
+          ]
+        },
+        "operation": {
+          "$ref": "#/$defs/operation"
+        },
+        "confirmation": {
+          "type": "string",
+          "enum": [
+            "never",
+            "large-amount",
+            "always"
+          ]
+        },
+        "iconAssetKey": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "sessionOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "type",
+        "default",
+        "mapsTo"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "boolean",
+            "integer",
+            "enum"
+          ]
+        },
+        "default": {},
+        "minimum": {
+          "type": "integer"
+        },
+        "maximum": {
+          "type": "integer"
+        },
+        "options": {
+          "type": "array",
+          "maxItems": 25,
+          "items": {
+            "$ref": "#/$defs/enumOption"
+          }
+        },
+        "mapsTo": {
+          "type": "string",
+          "enum": [
+            "bank.startingPlayerBalance",
+            "bank.allowPlayerOverdraft"
+          ]
+        }
+      }
+    }
+  }
+}

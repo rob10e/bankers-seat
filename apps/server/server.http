@@ -1,0 +1,22 @@
+@server_HostAddress = http://localhost:5266
+
+GET {{server_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{server_HostAddress}}/api/v1/templates
+Accept: application/json
+
+###
+
+POST {{server_HostAddress}}/api/v1/sessions
+Content-Type: application/json
+
+{
+  "templateId": "generic-property-trading",
+  "editionId": "standard-edition",
+  "templateVersion": "1.0.0",
+  "hostDisplayName": "Rob",
+  "sessionOptions": {}
+}

@@ -1,0 +1,37 @@
+# File Manifest
+
+- `.github/copilot-instructions.md`
+- `AGENTS.MD`
+- `PLANNING-PACK.md`
+- `README.md`
+- `docs/01-product-vision.md`
+- `docs/02-scope-and-requirements.md`
+- `docs/03-user-stories-and-flows.md`
+- `docs/04-system-architecture.md`
+- `docs/05-domain-model.md`
+- `docs/06-template-system.md`
+- `docs/07-template-json-specification.md`
+- `docs/08-realtime-and-concurrency.md`
+- `docs/09-api-and-hub-contracts.md`
+- `docs/10-data-storage.md`
+- `docs/11-ui-ux-plan.md`
+- `docs/12-testing-strategy.md`
+- `docs/13-security-privacy-and-ip.md`
+- `docs/14-deployment-and-observability.md`
+- `docs/15-roadmap.md`
+- `docs/16-mobile-hybrid-plan.md`
+- `docs/17-coding-standards.md`
+- `docs/18-accessibility-plan.md`
+- `docs/19-risks-and-open-decisions.md`
+- `docs/20-glossary.md`
+- `docs/INDEX.md`
+- `docs/adr/0001-server-authoritative-ledger.md`
+- `docs/adr/0002-json-schema-template-contract.md`
+- `docs/adr/0003-template-snapshot-per-session.md`
+- `docs/adr/0004-capacitor-mobile-strategy.md`
+- `templates/README.md`
+- `templates/samples/generic-life-journey/assets/.gitkeep`
+- `templates/samples/generic-life-journey/template.json`
+- `templates/samples/generic-property-trading/assets/.gitkeep`
+- `templates/samples/generic-property-trading/template.json`
+- `templates/schema/game-template.schema.json`
