@@ -888,47 +888,74 @@ public sealed class SessionScaffoldTests
         [Fact]
         public async Task ExecuteTemplateActionRejectsUnsupportedOperationTypes()
         {
-            await using var connection = new SqliteConnection("Data Source=:memory:");
-            await connection.OpenAsync();
-            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
-                .UseSqlite(connection)
-                .Options;
-            await using var dbContext = new BankersSeatDbContext(dbOptions);
-            await dbContext.Database.MigrateAsync();
-            var sessionService = new SqliteSessionService(dbContext, catalogService);
-            var created = await sessionService.CreateSessionAsync(
-                new CreateSessionRequest(
-                    "generic-life-journey",
-                    "family-edition",
-                    "1.0.0",
-                    "Host",
-                    new Dictionary<string, System.Text.Json.JsonElement>()
-                ),
-                CancellationToken.None
-            );
-            var joined = await sessionService.JoinSessionAsync(
-                new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
-                CancellationToken.None
+            var tempTemplatesRoot = CreateTempTemplatesRoot("generic-life-journey");
+            var templatePath = Path.Combine(
+                tempTemplatesRoot,
+                "samples",
+                "generic-life-journey",
+                "template.json"
             );
 
-            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                sessionService.ExecuteTemplateActionAsync(
-                    created.SessionId,
-                    created.HostParticipantId,
-                    created.ReconnectCredential,
-                    "buy-home",
-                    new ExecuteTemplateActionRequest(
-                        joined.ParticipantId,
-                        null,
-                        ExpectedSessionVersion: 2,
-                        IdempotencyKey: "unsupported-action",
-                        Note: string.Empty
+            try
+            {
+                var json = await File.ReadAllTextAsync(templatePath);
+                var updatedJson = json.Replace(
+                    "\"type\": \"bank-to-player\"",
+                    "\"type\": \"adjust-player-balance\"",
+                    StringComparison.Ordinal
+                );
+                await File.WriteAllTextAsync(templatePath, updatedJson);
+
+                var isolatedCatalog = new FileTemplateCatalogService(tempTemplatesRoot);
+                await using var connection = new SqliteConnection("Data Source=:memory:");
+                await connection.OpenAsync();
+                var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                    .UseSqlite(connection)
+                    .Options;
+                await using var dbContext = new BankersSeatDbContext(dbOptions);
+                await dbContext.Database.MigrateAsync();
+                var sessionService = new SqliteSessionService(dbContext, isolatedCatalog);
+                var created = await sessionService.CreateSessionAsync(
+                    new CreateSessionRequest(
+                        "generic-life-journey",
+                        "family-edition",
+                        "1.0.0",
+                        "Host",
+                        new Dictionary<string, System.Text.Json.JsonElement>()
                     ),
                     CancellationToken.None
-                )
-            );
+                );
+                var joined = await sessionService.JoinSessionAsync(
+                    new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                    CancellationToken.None
+                );
 
-            Assert.Equal("unsupported-template-action", exception.Message);
+                var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    sessionService.ExecuteTemplateActionAsync(
+                        created.SessionId,
+                        created.HostParticipantId,
+                        created.ReconnectCredential,
+                        "payday",
+                        new ExecuteTemplateActionRequest(
+                            joined.ParticipantId,
+                            null,
+                            ExpectedSessionVersion: 2,
+                            IdempotencyKey: "unsupported-action",
+                            Note: string.Empty
+                        ),
+                        CancellationToken.None
+                    )
+                );
+
+                Assert.Equal("unsupported-template-action", exception.Message);
+            }
+            finally
+            {
+                if (Directory.Exists(tempTemplatesRoot))
+                {
+                    Directory.Delete(tempTemplatesRoot, recursive: true);
+                }
+            }
         }
 
         [Fact]
@@ -1022,6 +1049,61 @@ public sealed class SessionScaffoldTests
             Assert.Equal("1", joinedChildrenField.ValueJson);
             Assert.Equal("action", response.Transaction.Kind);
             Assert.Empty(response.Transaction.Postings);
+        }
+
+        [Fact]
+        public async Task ExecuteTemplateActionAppliesCompositeOperationAtomically()
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, catalogService);
+            var created = await sessionService.CreateSessionAsync(
+                new CreateSessionRequest(
+                    "generic-life-journey",
+                    "family-edition",
+                    "1.0.0",
+                    "Host",
+                    new Dictionary<string, System.Text.Json.JsonElement>()
+                ),
+                CancellationToken.None
+            );
+            var joined = await sessionService.JoinSessionAsync(
+                new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                CancellationToken.None
+            );
+
+            var response = await sessionService.ExecuteTemplateActionAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                "buy-home",
+                new ExecuteTemplateActionRequest(
+                    joined.ParticipantId,
+                    null,
+                    ExpectedSessionVersion: 2,
+                    IdempotencyKey: "composite-1",
+                    Note: string.Empty
+                ),
+                CancellationToken.None
+            );
+
+            var joinedBalance = response.Snapshot.Accounts.Single(account =>
+                account.OwnerId == joined.ParticipantId
+            );
+            var bankBalance = response.Snapshot.Accounts.Single(account => account.OwnerType == "bank");
+            var ownsHome = response.Snapshot.PlayerFieldValues.Single(value =>
+                value.ParticipantId == joined.ParticipantId && value.FieldId == "owns-home"
+            );
+            Assert.Equal(-40000, joinedBalance.Balance);
+            Assert.Equal(50000, bankBalance.Balance);
+            Assert.Equal("true", ownsHome.ValueJson);
+            Assert.Equal("action", response.Transaction.Kind);
+            Assert.Equal(2, response.Transaction.Postings.Count);
         }
 
         [Fact]
@@ -1186,14 +1268,14 @@ public sealed class SessionScaffoldTests
             }
         }
 
-        private static string CreateTempTemplatesRoot()
+        private static string CreateTempTemplatesRoot(string templateId = "generic-property-trading")
         {
             var tempTemplatesRoot = Path.Combine(
                 Path.GetTempPath(),
                 $"bankers-seat-templates-{Guid.NewGuid():N}"
             );
-            var sourceTemplateDir = Path.Combine(TemplatesRoot, "samples", "generic-property-trading");
-            var targetTemplateDir = Path.Combine(tempTemplatesRoot, "samples", "generic-property-trading");
+            var sourceTemplateDir = Path.Combine(TemplatesRoot, "samples", templateId);
+            var targetTemplateDir = Path.Combine(tempTemplatesRoot, "samples", templateId);
             Directory.CreateDirectory(targetTemplateDir);
             File.Copy(
                 Path.Combine(sourceTemplateDir, "template.json"),

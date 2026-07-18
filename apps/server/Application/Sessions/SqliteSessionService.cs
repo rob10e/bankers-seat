@@ -732,6 +732,110 @@ public sealed class SqliteSessionService : ISessionService
             AddLedgerPostingEntities(sessionId, mutation.Transaction);
             responseTransaction = ToLedgerTransactionResponse(mutation.Transaction);
         }
+        else if (action.OperationType == ActionOperationType.Composite)
+        {
+            if (action.Steps.Count == 0)
+            {
+                throw new InvalidOperationException("invalid-template-snapshot");
+            }
+
+            var financialInstructions = new List<TransferInstruction>();
+            var fieldSteps = new List<ResolvedTemplateAction>();
+            foreach (var step in action.Steps)
+            {
+                var stepAction = new ResolvedTemplateAction(
+                    step.OperationType,
+                    step.Amount,
+                    action.Label,
+                    action.Scope,
+                    step.Operation,
+                    []
+                );
+                if (
+                    step.OperationType is ActionOperationType.BankToPlayer
+                        or ActionOperationType.PlayerToBank
+                        or ActionOperationType.PlayerToPlayer
+                )
+                {
+                    var stepInstructions = await ResolveActionTransferInstructionsAsync(
+                        sessionId,
+                        stepAction,
+                        request,
+                        policy,
+                        cancellationToken
+                    );
+                    financialInstructions.AddRange(stepInstructions);
+                }
+                else if (
+                    step.OperationType is ActionOperationType.SetField or ActionOperationType.IncrementField
+                )
+                {
+                    fieldSteps.Add(stepAction);
+                }
+                else
+                {
+                    throw new InvalidOperationException("unsupported-template-action");
+                }
+            }
+
+            foreach (var fieldStep in fieldSteps)
+            {
+                await ApplyFieldActionAsync(
+                    sessionId,
+                    snapshot.TemplateJson,
+                    fieldStep,
+                    request,
+                    nowUtc,
+                    cancellationToken
+                );
+            }
+
+            if (financialInstructions.Count > 0)
+            {
+                var currentBalances = await dbContext.Accounts
+                    .Where(record => record.SessionId == sessionId)
+                    .ToDictionaryAsync(record => record.Id, record => record.Balance, cancellationToken);
+                MoneyMutationResult mutation;
+                try
+                {
+                    mutation = MoneyMutationEngine.ApplyTransferBatch(
+                        currentBalances,
+                        sessionId,
+                        actorParticipantId,
+                        financialInstructions,
+                        nextSequence,
+                        nowUtc,
+                        note
+                    );
+                }
+                catch (DomainRuleViolationException exception)
+                {
+                    throw new InvalidOperationException(exception.Code);
+                }
+
+                await ApplyBalancesAsync(sessionId, mutation.UpdatedBalances, cancellationToken);
+                var actionTransaction = mutation.Transaction with { Kind = LedgerTransactionKind.Action };
+                transactionEntity = AddLedgerTransactionEntity(actionTransaction);
+                AddLedgerPostingEntities(sessionId, actionTransaction);
+                responseTransaction = ToLedgerTransactionResponse(actionTransaction);
+            }
+            else
+            {
+                var actionTransaction = new LedgerTransaction(
+                    Guid.NewGuid(),
+                    sessionId,
+                    nextSequence,
+                    actorParticipantId,
+                    LedgerTransactionKind.Action,
+                    null,
+                    note,
+                    nowUtc,
+                    []
+                );
+                transactionEntity = AddLedgerTransactionEntity(actionTransaction);
+                responseTransaction = ToLedgerTransactionResponse(actionTransaction);
+            }
+        }
         else if (action.OperationType is ActionOperationType.SetField or ActionOperationType.IncrementField)
         {
             await ApplyFieldActionAsync(
@@ -1394,41 +1498,113 @@ public sealed class SqliteSessionService : ISessionService
                     ReadActionAmount(operation),
                     label,
                     scope,
-                    operation.Clone()
+                    operation.Clone(),
+                    []
                 ),
                 "player-to-bank" => new ResolvedTemplateAction(
                     ActionOperationType.PlayerToBank,
                     ReadActionAmount(operation),
                     label,
                     scope,
-                    operation.Clone()
+                    operation.Clone(),
+                    []
                 ),
                 "player-to-player" => new ResolvedTemplateAction(
                     ActionOperationType.PlayerToPlayer,
                     ReadActionAmount(operation),
                     label,
                     scope,
-                    operation.Clone()
+                    operation.Clone(),
+                    []
                 ),
                 "set-field" => new ResolvedTemplateAction(
                     ActionOperationType.SetField,
                     null,
                     label,
                     scope,
-                    operation.Clone()
+                    operation.Clone(),
+                    []
                 ),
                 "increment-field" => new ResolvedTemplateAction(
                     ActionOperationType.IncrementField,
                     null,
                     label,
                     scope,
-                    operation.Clone()
+                    operation.Clone(),
+                    []
+                ),
+                "composite" => new ResolvedTemplateAction(
+                    ActionOperationType.Composite,
+                    null,
+                    label,
+                    scope,
+                    operation.Clone(),
+                    ResolveCompositeSteps(operation)
                 ),
                 _ => throw new InvalidOperationException("unsupported-template-action")
             };
         }
 
         throw new InvalidOperationException("action-not-found");
+    }
+
+    private static IReadOnlyList<ResolvedTemplateActionStep> ResolveCompositeSteps(JsonElement operation)
+    {
+        if (!operation.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException("invalid-template-snapshot");
+        }
+
+        var resolved = new List<ResolvedTemplateActionStep>();
+        foreach (var step in steps.EnumerateArray())
+        {
+            if (
+                step.ValueKind != JsonValueKind.Object
+                || !step.TryGetProperty("type", out var typeProperty)
+                || typeProperty.ValueKind != JsonValueKind.String
+            )
+            {
+                throw new InvalidOperationException("invalid-template-snapshot");
+            }
+
+            var stepType = typeProperty.GetString();
+            resolved.Add(stepType switch
+            {
+                "bank-to-player" => new ResolvedTemplateActionStep(
+                    ActionOperationType.BankToPlayer,
+                    ReadActionAmount(step),
+                    step.Clone()
+                ),
+                "player-to-bank" => new ResolvedTemplateActionStep(
+                    ActionOperationType.PlayerToBank,
+                    ReadActionAmount(step),
+                    step.Clone()
+                ),
+                "player-to-player" => new ResolvedTemplateActionStep(
+                    ActionOperationType.PlayerToPlayer,
+                    ReadActionAmount(step),
+                    step.Clone()
+                ),
+                "set-field" => new ResolvedTemplateActionStep(
+                    ActionOperationType.SetField,
+                    null,
+                    step.Clone()
+                ),
+                "increment-field" => new ResolvedTemplateActionStep(
+                    ActionOperationType.IncrementField,
+                    null,
+                    step.Clone()
+                ),
+                _ => throw new InvalidOperationException("unsupported-template-action")
+            });
+        }
+
+        if (resolved.Count == 0)
+        {
+            throw new InvalidOperationException("invalid-template-snapshot");
+        }
+
+        return resolved;
     }
 
     private static long ReadActionAmount(JsonElement operation)
@@ -2085,6 +2261,13 @@ public sealed class SqliteSessionService : ISessionService
         long? Amount,
         string Label,
         string Scope,
+        JsonElement Operation,
+        IReadOnlyList<ResolvedTemplateActionStep> Steps
+    );
+
+    private sealed record ResolvedTemplateActionStep(
+        ActionOperationType OperationType,
+        long? Amount,
         JsonElement Operation
     );
 
@@ -2103,6 +2286,7 @@ public sealed class SqliteSessionService : ISessionService
         PlayerToBank,
         PlayerToPlayer,
         SetField,
-        IncrementField
+        IncrementField,
+        Composite
     }
 }

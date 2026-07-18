@@ -122,7 +122,7 @@ Host-authorized participant-to-bank collection command with expected session ver
 
 ### `POST /api/v1/sessions/{sessionId}/actions/{actionId}/execute`
 
-Host-authorized template action execution command. Current implementation supports financial action operations (`bank-to-player`, `player-to-bank`, and `player-to-player`) with `single-player`, `two-players`, and `all-players` scopes where compatible, plus `set-field`/`increment-field` operations with `single-player` and `all-players` scopes. Requires expected session version plus idempotency key.
+Host-authorized template action execution command. Current implementation supports financial action operations (`bank-to-player`, `player-to-bank`, and `player-to-player`) with `single-player`, `two-players`, and `all-players` scopes where compatible; `set-field`/`increment-field` operations with `single-player` and `all-players` scopes; and `composite` multi-step actions composed of those supported step types. Requires expected session version plus idempotency key.
 
 ### `POST /api/v1/sessions/{sessionId}/corrections`
 
