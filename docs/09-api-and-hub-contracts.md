@@ -10,6 +10,8 @@ Implemented in scaffold:
 - `POST /api/v1/sessions/{sessionId}/reconnect`
 - `GET /api/v1/sessions/{sessionId}/snapshot`
 - `POST /api/v1/sessions/{sessionId}/transfer`
+- `POST /api/v1/sessions/{sessionId}/bank-payments`
+- `POST /api/v1/sessions/{sessionId}/bank-collections`
 - `POST /api/v1/sessions/{sessionId}/corrections`
 - `GET /api/v1/sessions/{sessionId}/ledger`
 - `GET /api/v1/sessions/{sessionId}/export`
@@ -108,6 +110,14 @@ Returns the authorized current session view.
 ### `POST /api/v1/sessions/{sessionId}/transfer`
 
 Host-authorized transfer between participant accounts. Requires actor headers, expected session version, and idempotency key.
+
+### `POST /api/v1/sessions/{sessionId}/bank-payments`
+
+Host-authorized bank-to-participant payment command with expected session version and idempotency key.
+
+### `POST /api/v1/sessions/{sessionId}/bank-collections`
+
+Host-authorized participant-to-bank collection command with expected session version and idempotency key.
 
 ### `POST /api/v1/sessions/{sessionId}/corrections`
 

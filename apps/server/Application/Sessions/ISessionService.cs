@@ -51,6 +51,22 @@ public interface ISessionService
         CancellationToken cancellationToken
     );
 
+    Task<MoneyCommandResponse> BankToParticipantAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        BankToParticipantRequest request,
+        CancellationToken cancellationToken
+    );
+
+    Task<MoneyCommandResponse> ParticipantToBankAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        ParticipantToBankRequest request,
+        CancellationToken cancellationToken
+    );
+
     Task<MoneyCommandResponse> CorrectTransactionAsync(
         Guid sessionId,
         Guid actorParticipantId,

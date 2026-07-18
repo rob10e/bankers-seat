@@ -59,7 +59,7 @@ public sealed class SessionScaffoldTests
         Assert.Single(await dbContext.GameSessions.ToListAsync());
         Assert.Single(await dbContext.TemplateSnapshots.ToListAsync());
         Assert.Single(await dbContext.Participants.ToListAsync());
-        Assert.Single(await dbContext.Accounts.ToListAsync());
+        Assert.Equal(2, await dbContext.Accounts.CountAsync());
     }
 
     [Fact]
@@ -741,5 +741,76 @@ public sealed class SessionScaffoldTests
             );
 
             Assert.Equal("unauthorized-command", exception.Message);
+        }
+
+        [Fact]
+        public async Task BankPaymentAndCollectionMutatePlayerAndBankBalances()
+        {
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync();
+            var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+                .UseSqlite(connection)
+                .Options;
+            await using var dbContext = new BankersSeatDbContext(dbOptions);
+            await dbContext.Database.MigrateAsync();
+            var sessionService = new SqliteSessionService(dbContext, catalogService);
+            var created = await sessionService.CreateSessionAsync(
+                new CreateSessionRequest(
+                    "generic-property-trading",
+                    "standard-edition",
+                    "1.0.0",
+                    "Host",
+                    new Dictionary<string, System.Text.Json.JsonElement>()
+                ),
+                CancellationToken.None
+            );
+            var joined = await sessionService.JoinSessionAsync(
+                new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+                CancellationToken.None
+            );
+
+            var payment = await sessionService.BankToParticipantAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                new BankToParticipantRequest(
+                    joined.ParticipantId,
+                    200,
+                    ExpectedSessionVersion: 2,
+                    IdempotencyKey: "bank-pay-1",
+                    Note: "Salary"
+                ),
+                CancellationToken.None
+            );
+            var playerAfterPayment = payment.Snapshot.Accounts.Single(account =>
+                account.OwnerId == joined.ParticipantId
+            );
+            var bankAfterPayment = payment.Snapshot.Accounts.Single(account =>
+                account.OwnerType == "bank"
+            );
+            Assert.Equal(1700, playerAfterPayment.Balance);
+            Assert.Equal(-200, bankAfterPayment.Balance);
+
+            var collection = await sessionService.ParticipantToBankAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                new ParticipantToBankRequest(
+                    joined.ParticipantId,
+                    300,
+                    ExpectedSessionVersion: 3,
+                    IdempotencyKey: "bank-col-1",
+                    Note: "Fee"
+                ),
+                CancellationToken.None
+            );
+            var playerAfterCollection = collection.Snapshot.Accounts.Single(account =>
+                account.OwnerId == joined.ParticipantId
+            );
+            var bankAfterCollection = collection.Snapshot.Accounts.Single(account =>
+                account.OwnerType == "bank"
+            );
+            Assert.Equal(1400, playerAfterCollection.Balance);
+            Assert.Equal(100, bankAfterCollection.Balance);
         }
 }

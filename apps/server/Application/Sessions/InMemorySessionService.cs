@@ -253,6 +253,38 @@ public sealed class InMemorySessionService : ISessionService
         throw new InvalidOperationException("not-supported");
     }
 
+    public Task<MoneyCommandResponse> BankToParticipantAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        BankToParticipantRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = sessionId;
+        _ = actorParticipantId;
+        _ = reconnectCredential;
+        _ = request;
+        _ = cancellationToken;
+        throw new InvalidOperationException("not-supported");
+    }
+
+    public Task<MoneyCommandResponse> ParticipantToBankAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        ParticipantToBankRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = sessionId;
+        _ = actorParticipantId;
+        _ = reconnectCredential;
+        _ = request;
+        _ = cancellationToken;
+        throw new InvalidOperationException("not-supported");
+    }
+
     public Task<MoneyCommandResponse> CorrectTransactionAsync(
         Guid sessionId,
         Guid actorParticipantId,

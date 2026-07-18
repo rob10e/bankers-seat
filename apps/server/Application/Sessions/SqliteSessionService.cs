@@ -49,6 +49,7 @@ public sealed class SqliteSessionService : ISessionService
         var hostParticipantId = Guid.NewGuid();
         var reconnectCredential = CreateReconnectCredential();
         var reconnectHash = HashSecret(reconnectCredential);
+        var bankPolicy = ParseBankPolicy(templateSnapshot.TemplateJson, templateSnapshot.AllowPlayerOverdraft);
 
         var roomCode = await GenerateUniqueRoomCodeAsync(cancellationToken);
         var snapshotEntity = new TemplateSnapshotEntity
@@ -94,11 +95,21 @@ public sealed class SqliteSessionService : ISessionService
             Balance = templateSnapshot.StartingPlayerBalance,
             Version = 1
         };
+        var bankAccountEntity = new AccountEntity
+        {
+            Id = Guid.NewGuid(),
+            SessionId = sessionId,
+            OwnerType = "bank",
+            OwnerId = sessionId,
+            Balance = bankPolicy.StartingBankBalance,
+            Version = 1
+        };
 
         dbContext.TemplateSnapshots.Add(snapshotEntity);
         dbContext.GameSessions.Add(sessionEntity);
         dbContext.Participants.Add(participantEntity);
         dbContext.Accounts.Add(accountEntity);
+        dbContext.Accounts.Add(bankAccountEntity);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -426,6 +437,194 @@ public sealed class SqliteSessionService : ISessionService
         );
     }
 
+    public async Task<MoneyCommandResponse> BankToParticipantAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        BankToParticipantRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        ValidateBankToParticipantRequest(request);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var (session, _) = await AuthorizeMutationAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            cancellationToken
+        );
+        var idempotency = await TryLoadIdempotencyRecordAsync(
+            sessionId,
+            actorParticipantId,
+            request.IdempotencyKey,
+            "bank-to-participant",
+            request,
+            cancellationToken
+        );
+        if (idempotency is not null)
+        {
+            var replayResponse = await BuildReplayResponseAsync(sessionId, idempotency, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return replayResponse;
+        }
+
+        if (session.SessionVersion != request.ExpectedSessionVersion)
+        {
+            throw new InvalidOperationException("stale-session-version");
+        }
+
+        var policy = await GetBankPolicyAsync(session, cancellationToken);
+        var bankAccount = await FindBankAccountAsync(sessionId, cancellationToken);
+        var playerAccount = await FindParticipantAccountAsync(sessionId, request.ToParticipantId, cancellationToken);
+        var nextSequence = await GetNextSequenceAsync(sessionId, cancellationToken);
+        var currentBalances = await dbContext.Accounts
+            .Where(record => record.SessionId == sessionId)
+            .ToDictionaryAsync(record => record.Id, record => record.Balance, cancellationToken);
+
+        MoneyMutationResult mutation;
+        try
+        {
+            mutation = MoneyMutationEngine.ApplyTransfer(
+                currentBalances,
+                sessionId,
+                actorParticipantId,
+                bankAccount.Id,
+                playerAccount.Id,
+                request.Amount,
+                policy.IsUnlimitedBank,
+                nextSequence,
+                DateTimeOffset.UtcNow,
+                string.IsNullOrWhiteSpace(request.Note) ? "Bank payment" : request.Note.Trim()
+            );
+        }
+        catch (DomainRuleViolationException exception)
+        {
+            throw new InvalidOperationException(exception.Code);
+        }
+
+        await ApplyBalancesAsync(sessionId, mutation.UpdatedBalances, cancellationToken);
+        var transactionEntity = AddLedgerTransactionEntity(mutation.Transaction);
+        AddLedgerPostingEntities(sessionId, mutation.Transaction);
+
+        session.SessionVersion += 1;
+        var resultToken = transactionEntity.Id.ToString("N");
+        dbContext.IdempotencyRecords.Add(
+            CreateIdempotencyRecord(
+                sessionId,
+                actorParticipantId,
+                request.IdempotencyKey.Trim(),
+                "bank-to-participant",
+                request,
+                resultToken
+            )
+        );
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        return new MoneyCommandResponse(
+            snapshot,
+            ToLedgerTransactionResponse(mutation.Transaction),
+            IdempotentReplay: false
+        );
+    }
+
+    public async Task<MoneyCommandResponse> ParticipantToBankAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        ParticipantToBankRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        ValidateParticipantToBankRequest(request);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var (session, _) = await AuthorizeMutationAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            cancellationToken
+        );
+        var idempotency = await TryLoadIdempotencyRecordAsync(
+            sessionId,
+            actorParticipantId,
+            request.IdempotencyKey,
+            "participant-to-bank",
+            request,
+            cancellationToken
+        );
+        if (idempotency is not null)
+        {
+            var replayResponse = await BuildReplayResponseAsync(sessionId, idempotency, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return replayResponse;
+        }
+
+        if (session.SessionVersion != request.ExpectedSessionVersion)
+        {
+            throw new InvalidOperationException("stale-session-version");
+        }
+
+        var policy = await GetBankPolicyAsync(session, cancellationToken);
+        var bankAccount = await FindBankAccountAsync(sessionId, cancellationToken);
+        var playerAccount = await FindParticipantAccountAsync(sessionId, request.FromParticipantId, cancellationToken);
+        var nextSequence = await GetNextSequenceAsync(sessionId, cancellationToken);
+        var currentBalances = await dbContext.Accounts
+            .Where(record => record.SessionId == sessionId)
+            .ToDictionaryAsync(record => record.Id, record => record.Balance, cancellationToken);
+
+        MoneyMutationResult mutation;
+        try
+        {
+            mutation = MoneyMutationEngine.ApplyTransfer(
+                currentBalances,
+                sessionId,
+                actorParticipantId,
+                playerAccount.Id,
+                bankAccount.Id,
+                request.Amount,
+                policy.AllowPlayerOverdraft,
+                nextSequence,
+                DateTimeOffset.UtcNow,
+                string.IsNullOrWhiteSpace(request.Note) ? "Bank collection" : request.Note.Trim()
+            );
+        }
+        catch (DomainRuleViolationException exception)
+        {
+            throw new InvalidOperationException(exception.Code);
+        }
+
+        await ApplyBalancesAsync(sessionId, mutation.UpdatedBalances, cancellationToken);
+        var transactionEntity = AddLedgerTransactionEntity(mutation.Transaction);
+        AddLedgerPostingEntities(sessionId, mutation.Transaction);
+
+        session.SessionVersion += 1;
+        var resultToken = transactionEntity.Id.ToString("N");
+        dbContext.IdempotencyRecords.Add(
+            CreateIdempotencyRecord(
+                sessionId,
+                actorParticipantId,
+                request.IdempotencyKey.Trim(),
+                "participant-to-bank",
+                request,
+                resultToken
+            )
+        );
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        return new MoneyCommandResponse(
+            snapshot,
+            ToLedgerTransactionResponse(mutation.Transaction),
+            IdempotentReplay: false
+        );
+    }
+
     public async Task<MoneyCommandResponse> CorrectTransactionAsync(
         Guid sessionId,
         Guid actorParticipantId,
@@ -592,6 +791,32 @@ public sealed class SqliteSessionService : ISessionService
             || request.ExpectedSessionVersion <= 0
             || string.IsNullOrWhiteSpace(request.IdempotencyKey)
             || string.IsNullOrWhiteSpace(request.Reason)
+        )
+        {
+            throw new InvalidOperationException("invalid-request");
+        }
+    }
+
+    private static void ValidateBankToParticipantRequest(BankToParticipantRequest request)
+    {
+        if (
+            request.ToParticipantId == Guid.Empty
+            || request.ExpectedSessionVersion <= 0
+            || request.Amount <= 0
+            || string.IsNullOrWhiteSpace(request.IdempotencyKey)
+        )
+        {
+            throw new InvalidOperationException("invalid-request");
+        }
+    }
+
+    private static void ValidateParticipantToBankRequest(ParticipantToBankRequest request)
+    {
+        if (
+            request.FromParticipantId == Guid.Empty
+            || request.ExpectedSessionVersion <= 0
+            || request.Amount <= 0
+            || string.IsNullOrWhiteSpace(request.IdempotencyKey)
         )
         {
             throw new InvalidOperationException("invalid-request");
@@ -766,6 +991,63 @@ public sealed class SqliteSessionService : ISessionService
         }
 
         return account;
+    }
+
+    private async Task<AccountEntity> FindBankAccountAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var account = await dbContext.Accounts.SingleOrDefaultAsync(
+            record =>
+                record.SessionId == sessionId
+                && record.OwnerType == "bank"
+                && record.OwnerId == sessionId,
+            cancellationToken
+        );
+        if (account is null)
+        {
+            throw new InvalidOperationException("account-not-found");
+        }
+
+        return account;
+    }
+
+    private async Task<BankPolicy> GetBankPolicyAsync(
+        GameSessionEntity session,
+        CancellationToken cancellationToken
+    )
+    {
+        var snapshot = await dbContext.TemplateSnapshots.SingleAsync(
+            record => record.Id == session.TemplateSnapshotId,
+            cancellationToken
+        );
+        return ParseBankPolicy(snapshot.TemplateJson, snapshot.AllowPlayerOverdraft);
+    }
+
+    private static BankPolicy ParseBankPolicy(string templateJson, bool allowPlayerOverdraft)
+    {
+        using var document = JsonDocument.Parse(templateJson);
+        var root = document.RootElement;
+        if (
+            !root.TryGetProperty("bank", out var bank)
+            || !bank.TryGetProperty("bankMode", out var bankModeProperty)
+            || bankModeProperty.ValueKind != JsonValueKind.String
+        )
+        {
+            throw new InvalidOperationException("invalid-template-snapshot");
+        }
+
+        var bankMode = bankModeProperty.GetString();
+        var isUnlimited = string.Equals(bankMode, "unlimited", StringComparison.Ordinal);
+        long startingBankBalance = 0;
+        if (
+            bank.TryGetProperty("startingBankBalance", out var startingBankBalanceProperty)
+            && startingBankBalanceProperty.ValueKind == JsonValueKind.Number
+            && startingBankBalanceProperty.TryGetInt64(out var parsedStartingBalance)
+        )
+        {
+            startingBankBalance = parsedStartingBalance;
+        }
+
+        return new BankPolicy(isUnlimited, allowPlayerOverdraft, startingBankBalance);
     }
 
     private async Task<long> GetNextSequenceAsync(Guid sessionId, CancellationToken cancellationToken)
@@ -1006,4 +1288,10 @@ public sealed class SqliteSessionService : ISessionService
         var hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
+
+    private sealed record BankPolicy(
+        bool IsUnlimitedBank,
+        bool AllowPlayerOverdraft,
+        long StartingBankBalance
+    );
 }

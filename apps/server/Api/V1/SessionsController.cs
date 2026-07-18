@@ -154,6 +154,84 @@ public sealed class SessionsController : ControllerBase
         }
     }
 
+    [HttpPost("{sessionId:guid}/bank-payments")]
+    [ProducesResponseType<MoneyCommandResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MoneyCommandResponse>> BankToParticipant(
+        [FromRoute] Guid sessionId,
+        [FromBody] BankToParticipantRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Mutating requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.BankToParticipantAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                request,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
+    [HttpPost("{sessionId:guid}/bank-collections")]
+    [ProducesResponseType<MoneyCommandResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MoneyCommandResponse>> ParticipantToBank(
+        [FromRoute] Guid sessionId,
+        [FromBody] ParticipantToBankRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Mutating requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.ParticipantToBankAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                request,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
     [HttpPost("{sessionId:guid}/corrections")]
     [ProducesResponseType<MoneyCommandResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
