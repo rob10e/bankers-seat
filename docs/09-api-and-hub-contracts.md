@@ -128,6 +128,8 @@ Host-authorized lifecycle command. Requires actor headers, expected session vers
 
 Host-authorized lifecycle command. Requires actor headers, expected session version, and idempotency key. Valid only when session status is `active` or `paused`; transitions to `completed`.
 
+Accepted mutating commands publish an updated `SessionSnapshot` to the session's SignalR group so subscribed devices stay in sync.
+
 ### `POST /api/v1/sessions/{sessionId}/transfer`
 
 Host-authorized transfer between participant accounts. Requires actor headers, expected session version, and idempotency key.

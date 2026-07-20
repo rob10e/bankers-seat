@@ -329,6 +329,48 @@ public sealed class SessionScaffoldTests
     }
 
     [Fact]
+    public async Task SessionMutationsBroadcastUpdatedSnapshots()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        await using var dbContext = new BankersSeatDbContext(dbOptions);
+        await dbContext.Database.MigrateAsync();
+        var broadcaster = new RecordingSessionEventBroadcaster();
+        var sessionService = new SqliteSessionService(dbContext, catalogService, broadcaster);
+        var created = await sessionService.CreateSessionAsync(
+            new CreateSessionRequest(
+                "generic-property-trading",
+                "standard-edition",
+                "1.0.0",
+                "Host",
+                new Dictionary<string, System.Text.Json.JsonElement>()
+            ),
+            CancellationToken.None
+        );
+
+        await sessionService.JoinSessionAsync(
+            new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+            CancellationToken.None
+        );
+        await sessionService.StartSessionAsync(
+            created.SessionId,
+            created.HostParticipantId,
+            created.ReconnectCredential,
+            new SessionLifecycleCommandRequest(ExpectedSessionVersion: 2, IdempotencyKey: "start-1"),
+            CancellationToken.None
+        );
+
+        Assert.Equal(2, broadcaster.Snapshots.Count);
+        Assert.Equal("lobby", broadcaster.Snapshots[0].Status);
+        Assert.Equal(2, broadcaster.Snapshots[0].SessionVersion);
+        Assert.Equal("active", broadcaster.Snapshots[1].Status);
+        Assert.Equal(3, broadcaster.Snapshots[1].SessionVersion);
+    }
+
+    [Fact]
     public async Task TransferBetweenParticipantsPersistsLedgerAndUpdatesBalances()
     {
             await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -1793,5 +1835,22 @@ public sealed class SessionScaffoldTests
                 overwrite: true
             );
             return tempTemplatesRoot;
+        }
+
+        private sealed class RecordingSessionEventBroadcaster : ISessionEventBroadcaster
+        {
+            public List<SessionSnapshotResponse> Snapshots { get; } = [];
+
+            public Task BroadcastSessionSnapshotAsync(
+                Guid sessionId,
+                SessionSnapshotResponse snapshot,
+                CancellationToken cancellationToken
+            )
+            {
+                _ = sessionId;
+                _ = cancellationToken;
+                Snapshots.Add(snapshot);
+                return Task.CompletedTask;
+            }
         }
 }

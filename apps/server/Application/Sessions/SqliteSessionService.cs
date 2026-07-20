@@ -14,14 +14,17 @@ public sealed class SqliteSessionService : ISessionService
 {
     private readonly BankersSeatDbContext dbContext;
     private readonly ITemplateCatalogService templateCatalogService;
+    private readonly ISessionEventBroadcaster eventBroadcaster;
 
     public SqliteSessionService(
         BankersSeatDbContext dbContext,
-        ITemplateCatalogService templateCatalogService
+        ITemplateCatalogService templateCatalogService,
+        ISessionEventBroadcaster? eventBroadcaster = null
     )
     {
         this.dbContext = dbContext;
         this.templateCatalogService = templateCatalogService;
+        this.eventBroadcaster = eventBroadcaster ?? NullSessionEventBroadcaster.Instance;
     }
 
     public async Task<CreateSessionResponse> CreateSessionAsync(
@@ -197,6 +200,7 @@ public sealed class SqliteSessionService : ISessionService
         await transaction.CommitAsync(cancellationToken);
 
         var snapshot = await BuildSnapshotAsync(sessionEntity.Id, cancellationToken);
+        await PublishSessionSnapshotAsync(sessionEntity.Id, cancellationToken);
         return new JoinSessionResponse(
             sessionEntity.Id,
             participant.Id,
@@ -243,6 +247,7 @@ public sealed class SqliteSessionService : ISessionService
         await transaction.CommitAsync(cancellationToken);
 
         var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        await PublishSessionSnapshotAsync(sessionId, cancellationToken);
         return new ReconnectSessionResponse(sessionId, participant.Id, refreshedCredential, snapshot);
     }
 
@@ -529,6 +534,7 @@ public sealed class SqliteSessionService : ISessionService
         await transaction.CommitAsync(cancellationToken);
 
         var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        await PublishSessionSnapshotAsync(sessionId, cancellationToken);
         return new MoneyCommandResponse(
             snapshot,
             ToLedgerTransactionResponse(mutation.Transaction),
@@ -623,6 +629,7 @@ public sealed class SqliteSessionService : ISessionService
         await transaction.CommitAsync(cancellationToken);
 
         var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        await PublishSessionSnapshotAsync(sessionId, cancellationToken);
         return new MoneyCommandResponse(
             snapshot,
             ToLedgerTransactionResponse(mutation.Transaction),
@@ -717,6 +724,7 @@ public sealed class SqliteSessionService : ISessionService
         await transaction.CommitAsync(cancellationToken);
 
         var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        await PublishSessionSnapshotAsync(sessionId, cancellationToken);
         return new MoneyCommandResponse(
             snapshot,
             ToLedgerTransactionResponse(mutation.Transaction),
@@ -975,6 +983,7 @@ public sealed class SqliteSessionService : ISessionService
         await transaction.CommitAsync(cancellationToken);
 
         var updatedSnapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        await PublishSessionSnapshotAsync(sessionId, cancellationToken);
         return new MoneyCommandResponse(updatedSnapshot, responseTransaction, IdempotentReplay: false);
     }
 
@@ -1095,6 +1104,7 @@ public sealed class SqliteSessionService : ISessionService
         await transaction.CommitAsync(cancellationToken);
 
         var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        await PublishSessionSnapshotAsync(sessionId, cancellationToken);
         return new MoneyCommandResponse(
             snapshot,
             ToLedgerTransactionResponse(mutation.Transaction),
@@ -1356,10 +1366,9 @@ public sealed class SqliteSessionService : ISessionService
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        return new SessionLifecycleCommandResponse(
-            await BuildSnapshotAsync(sessionId, cancellationToken),
-            IdempotentReplay: false
-        );
+        var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        await PublishSessionSnapshotAsync(sessionId, cancellationToken);
+        return new SessionLifecycleCommandResponse(snapshot, IdempotentReplay: false);
     }
 
     private async Task<SessionLifecycleCommandResponse> BuildSessionLifecycleReplayResponseAsync(
@@ -1371,6 +1380,12 @@ public sealed class SqliteSessionService : ISessionService
             await BuildSnapshotAsync(sessionId, cancellationToken),
             IdempotentReplay: true
         );
+    }
+
+    private async Task PublishSessionSnapshotAsync(Guid sessionId, CancellationToken cancellationToken)
+    {
+        var snapshot = await BuildSnapshotAsync(sessionId, cancellationToken);
+        await eventBroadcaster.BroadcastSessionSnapshotAsync(sessionId, snapshot, cancellationToken);
     }
 
     private async Task<MoneyCommandResponse> BuildReplayResponseAsync(

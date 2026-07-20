@@ -32,6 +32,7 @@ builder.Services.AddDbContext<BankersSeatDbContext>(options =>
     var connectionString = builder.Configuration.GetConnectionString("BankersSeat");
     options.UseSqlite(connectionString);
 });
+builder.Services.AddSingleton<ISessionEventBroadcaster, SignalRSessionEventBroadcaster>();
 builder.Services.AddScoped<ISessionService, SqliteSessionService>();
 
 var app = builder.Build();

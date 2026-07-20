@@ -109,7 +109,7 @@ A mutation must atomically persist:
 - Idempotency record.
 - Outbox event records when the outbox pattern is used.
 
-Publish real-time events only after commit.
+Publish real-time events only after commit. In the current implementation, accepted mutating commands broadcast the latest `SessionSnapshot` to the session SignalR group after commit so connected devices can refresh immediately.
 
 ## Reconnection
 
