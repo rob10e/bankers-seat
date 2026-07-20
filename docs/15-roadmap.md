@@ -13,6 +13,7 @@
 - Template validation test suite and integration coverage for active-session template snapshot immutability.
 - Domain money and correction invariant tests for balanced postings, overdraft behavior, duplicate correction protection, and atomic failure handling.
 - GitHub Actions CI workflow enforcing template validation, workspace lint/typecheck/tests, and .NET build/integration tests.
+- Docker image and Compose file for self-hosted release packaging.
 - Financial command handlers for participant transfers and transaction corrections with idempotency, version checks, host authorization, and immutable ledger persistence.
 - Bank-payment and bank-collection command handlers with transactional balance updates and immutable ledger postings.
 - Template financial action execution handler for declarative `bank-to-player`, `player-to-bank`, `player-to-player`, and `adjust-player-balance` operations with idempotency and immutable ledger postings.
@@ -93,7 +94,7 @@ Validate the template model and banker workflow before adding multiplayer comple
 ### Features
 
 - Docker image and Compose file.
-- mounted template directories.
+- ~~mounted template directories.~~
 - template rescan.
 - health checks.
 - backup/restore documentation.

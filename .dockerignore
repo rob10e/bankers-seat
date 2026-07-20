@@ -1,0 +1,11 @@
+.git
+.github
+apps/**/bin
+apps/**/obj
+apps/**/dist
+apps/**/node_modules
+packages/**/node_modules
+tests/**/bin
+tests/**/obj
+node_modules
+**/.DS_Store

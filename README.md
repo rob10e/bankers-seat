@@ -83,6 +83,7 @@ bankers-seat/
 - SQLite persistence baseline is implemented with EF Core, checked-in migrations, and transactional session/participant/account/template snapshot storage.
 - Financial transfer, bank payment, bank collection, template action execution (financial operations including `adjust-player-balance`, field operations, and composite multi-step actions), and correction command handling is implemented with session-version checks, idempotency, and immutable ledger transaction/posting persistence.
 - GitHub Actions CI workflow runs template validation, workspace lint/typecheck/tests, and .NET build/integration tests on pushes and pull requests.
+- A Docker image plus Compose file are available for self-hosted deployment, serving the built web UI from the server container and mounting SQLite/template volumes.
 
 ## Planning document index
 

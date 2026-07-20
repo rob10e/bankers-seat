@@ -42,6 +42,8 @@ optional telemetry collector
 
 The web application can be served by ASP.NET Core or as static assets behind the same reverse proxy.
 
+The repository includes a single-container Docker image that publishes the ASP.NET Core app and serves the built web UI from the same origin, plus a Compose file that mounts `/data` for SQLite and `/templates` for template discovery.
+
 Mounted paths:
 
 - Installed templates.
@@ -134,6 +136,14 @@ Provide:
 - health check instructions.
 - log collection instructions.
 - default local-network security warning.
+
+## Self-hosted quick start
+
+```bash
+docker compose up --build
+```
+
+The container listens on port `8080`, stores SQLite data under `/data`, and reads template JSON from `/templates`.
 
 ## Scale path
 

@@ -24,7 +24,10 @@ builder.Services.AddCors(options =>
 builder.Services.AddSingleton<ITemplateCatalogService>(serviceProvider =>
 {
     var environment = serviceProvider.GetRequiredService<IWebHostEnvironment>();
-    var templatesRoot = Path.GetFullPath(Path.Combine(environment.ContentRootPath, "..", "..", "templates"));
+    var configuredTemplatesRoot = builder.Configuration["Templates:Root"];
+    var templatesRoot = string.IsNullOrWhiteSpace(configuredTemplatesRoot)
+        ? Path.GetFullPath(Path.Combine(environment.ContentRootPath, "..", "..", "templates"))
+        : Path.GetFullPath(configuredTemplatesRoot);
     return new FileTemplateCatalogService(templatesRoot);
 });
 builder.Services.AddDbContext<BankersSeatDbContext>(options =>
@@ -48,9 +51,20 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
+var webRootPath = Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (Directory.Exists(webRootPath))
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
+
 app.UseCors("WebClient");
 app.MapControllers();
 app.MapHub<GameHub>("/hubs/game");
+if (Directory.Exists(webRootPath))
+{
+    app.MapFallbackToFile("index.html");
+}
 
 app.MapGet("/health", () =>
 {
