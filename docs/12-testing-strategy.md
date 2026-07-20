@@ -13,6 +13,7 @@
 - Integration tests for player field defaults and template `increment-field`/`toggle-field` action execution behavior (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for template `composite` action execution with atomic multi-step financial + field effects (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for `adjust-player-balance` action execution (top-level and composite-step usage) (`tests/integration/server/session-scaffold-tests.cs`).
+- Integration tests for host-authorized session lifecycle transitions (`start`, `pause`, `resume`, `complete`), idempotent replay behavior, and join rejection after lobby (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for authorized ledger retrieval with newest-first pagination and unauthorized access rejection (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for authorized session export retrieval and unauthorized export rejection (`tests/integration/server/session-scaffold-tests.cs`).
 - Template schema and semantic validation CLI via `pnpm templates:validate`.

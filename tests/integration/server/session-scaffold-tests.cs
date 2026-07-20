@@ -151,6 +151,184 @@ public sealed class SessionScaffoldTests
     }
 
     [Fact]
+    public async Task SessionLifecycleTransitionsPersistAndIncrementVersion()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        await using var dbContext = new BankersSeatDbContext(dbOptions);
+        await dbContext.Database.MigrateAsync();
+        var sessionService = new SqliteSessionService(dbContext, catalogService);
+        var created = await sessionService.CreateSessionAsync(
+            new CreateSessionRequest(
+                "generic-property-trading",
+                "standard-edition",
+                "1.0.0",
+                "Host",
+                new Dictionary<string, System.Text.Json.JsonElement>()
+            ),
+            CancellationToken.None
+        );
+        await sessionService.JoinSessionAsync(
+            new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+            CancellationToken.None
+        );
+
+        var started = await sessionService.StartSessionAsync(
+            created.SessionId,
+            created.HostParticipantId,
+            created.ReconnectCredential,
+            new SessionLifecycleCommandRequest(ExpectedSessionVersion: 2, IdempotencyKey: "start-1"),
+            CancellationToken.None
+        );
+        var paused = await sessionService.PauseSessionAsync(
+            created.SessionId,
+            created.HostParticipantId,
+            created.ReconnectCredential,
+            new SessionLifecycleCommandRequest(ExpectedSessionVersion: 3, IdempotencyKey: "pause-1"),
+            CancellationToken.None
+        );
+        var resumed = await sessionService.ResumeSessionAsync(
+            created.SessionId,
+            created.HostParticipantId,
+            created.ReconnectCredential,
+            new SessionLifecycleCommandRequest(ExpectedSessionVersion: 4, IdempotencyKey: "resume-1"),
+            CancellationToken.None
+        );
+        var completed = await sessionService.CompleteSessionAsync(
+            created.SessionId,
+            created.HostParticipantId,
+            created.ReconnectCredential,
+            new SessionLifecycleCommandRequest(ExpectedSessionVersion: 5, IdempotencyKey: "complete-1"),
+            CancellationToken.None
+        );
+
+        Assert.Equal("active", started.Snapshot.Status);
+        Assert.Equal(3, started.Snapshot.SessionVersion);
+        Assert.Equal("paused", paused.Snapshot.Status);
+        Assert.Equal(4, paused.Snapshot.SessionVersion);
+        Assert.Equal("active", resumed.Snapshot.Status);
+        Assert.Equal(5, resumed.Snapshot.SessionVersion);
+        Assert.Equal("completed", completed.Snapshot.Status);
+        Assert.Equal(6, completed.Snapshot.SessionVersion);
+        Assert.False(completed.IdempotentReplay);
+    }
+
+    [Fact]
+    public async Task SessionLifecycleCommandReplayReturnsIdempotentResponse()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        await using var dbContext = new BankersSeatDbContext(dbOptions);
+        await dbContext.Database.MigrateAsync();
+        var sessionService = new SqliteSessionService(dbContext, catalogService);
+        var created = await sessionService.CreateSessionAsync(
+            new CreateSessionRequest(
+                "generic-property-trading",
+                "standard-edition",
+                "1.0.0",
+                "Host",
+                new Dictionary<string, System.Text.Json.JsonElement>()
+            ),
+            CancellationToken.None
+        );
+        await sessionService.JoinSessionAsync(
+            new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+            CancellationToken.None
+        );
+
+        var first = await sessionService.StartSessionAsync(
+            created.SessionId,
+            created.HostParticipantId,
+            created.ReconnectCredential,
+            new SessionLifecycleCommandRequest(ExpectedSessionVersion: 2, IdempotencyKey: "start-replay-1"),
+            CancellationToken.None
+        );
+        var replay = await sessionService.StartSessionAsync(
+            created.SessionId,
+            created.HostParticipantId,
+            created.ReconnectCredential,
+            new SessionLifecycleCommandRequest(ExpectedSessionVersion: 2, IdempotencyKey: "start-replay-1"),
+            CancellationToken.None
+        );
+
+        Assert.False(first.IdempotentReplay);
+        Assert.True(replay.IdempotentReplay);
+        Assert.Equal(first.Snapshot.Status, replay.Snapshot.Status);
+        Assert.Equal(first.Snapshot.SessionVersion, replay.Snapshot.SessionVersion);
+    }
+
+    [Fact]
+    public async Task SessionLifecycleRejectsInvalidTransitionsAndJoinOutsideLobby()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var dbOptions = new DbContextOptionsBuilder<BankersSeatDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        await using var dbContext = new BankersSeatDbContext(dbOptions);
+        await dbContext.Database.MigrateAsync();
+        var sessionService = new SqliteSessionService(dbContext, catalogService);
+        var created = await sessionService.CreateSessionAsync(
+            new CreateSessionRequest(
+                "generic-property-trading",
+                "standard-edition",
+                "1.0.0",
+                "Host",
+                new Dictionary<string, System.Text.Json.JsonElement>()
+            ),
+            CancellationToken.None
+        );
+        var joined = await sessionService.JoinSessionAsync(
+            new JoinSessionRequest(created.RoomCode, "Player2", "blue"),
+            CancellationToken.None
+        );
+
+        var invalidPause = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sessionService.PauseSessionAsync(
+                created.SessionId,
+                created.HostParticipantId,
+                created.ReconnectCredential,
+                new SessionLifecycleCommandRequest(ExpectedSessionVersion: 2, IdempotencyKey: "pause-invalid-1"),
+                CancellationToken.None
+            )
+        );
+        Assert.Equal("invalid-session-status", invalidPause.Message);
+
+        var unauthorizedStart = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sessionService.StartSessionAsync(
+                created.SessionId,
+                joined.ParticipantId,
+                joined.ReconnectCredential,
+                new SessionLifecycleCommandRequest(ExpectedSessionVersion: 2, IdempotencyKey: "start-unauth-1"),
+                CancellationToken.None
+            )
+        );
+        Assert.Equal("unauthorized-command", unauthorizedStart.Message);
+
+        await sessionService.StartSessionAsync(
+            created.SessionId,
+            created.HostParticipantId,
+            created.ReconnectCredential,
+            new SessionLifecycleCommandRequest(ExpectedSessionVersion: 2, IdempotencyKey: "start-valid-1"),
+            CancellationToken.None
+        );
+
+        var joinAfterStart = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sessionService.JoinSessionAsync(
+                new JoinSessionRequest(created.RoomCode, "LatePlayer", "green"),
+                CancellationToken.None
+            )
+        );
+        Assert.Equal("invalid-session-status", joinAfterStart.Message);
+    }
+
+    [Fact]
     public async Task TransferBetweenParticipantsPersistsLedgerAndUpdatesBalances()
     {
             await using var connection = new SqliteConnection("Data Source=:memory:");

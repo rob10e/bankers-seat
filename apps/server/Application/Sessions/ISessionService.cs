@@ -27,6 +27,38 @@ public interface ISessionService
         CancellationToken cancellationToken
     );
 
+    Task<SessionLifecycleCommandResponse> StartSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    );
+
+    Task<SessionLifecycleCommandResponse> PauseSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    );
+
+    Task<SessionLifecycleCommandResponse> ResumeSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    );
+
+    Task<SessionLifecycleCommandResponse> CompleteSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    );
+
     Task<SessionLedgerResponse> GetAuthorizedLedgerPageAsync(
         Guid sessionId,
         Guid participantId,

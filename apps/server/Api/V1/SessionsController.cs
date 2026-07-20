@@ -115,6 +115,162 @@ public sealed class SessionsController : ControllerBase
         }
     }
 
+    [HttpPost("{sessionId:guid}/start")]
+    [ProducesResponseType<SessionLifecycleCommandResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SessionLifecycleCommandResponse>> StartSession(
+        [FromRoute] Guid sessionId,
+        [FromBody] SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Mutating requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.StartSessionAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                request,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
+    [HttpPost("{sessionId:guid}/pause")]
+    [ProducesResponseType<SessionLifecycleCommandResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SessionLifecycleCommandResponse>> PauseSession(
+        [FromRoute] Guid sessionId,
+        [FromBody] SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Mutating requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.PauseSessionAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                request,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
+    [HttpPost("{sessionId:guid}/resume")]
+    [ProducesResponseType<SessionLifecycleCommandResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SessionLifecycleCommandResponse>> ResumeSession(
+        [FromRoute] Guid sessionId,
+        [FromBody] SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Mutating requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.ResumeSessionAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                request,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
+    [HttpPost("{sessionId:guid}/complete")]
+    [ProducesResponseType<SessionLifecycleCommandResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SessionLifecycleCommandResponse>> CompleteSession(
+        [FromRoute] Guid sessionId,
+        [FromBody] SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryReadActorHeaders(out var participantId, out var reconnectCredential))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Invalid request.",
+                detail: "Mutating requests must include participant and reconnect credentials.",
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid-request" }
+            );
+        }
+
+        try
+        {
+            var response = await sessionService.CompleteSessionAsync(
+                sessionId,
+                participantId,
+                reconnectCredential,
+                request,
+                cancellationToken
+            );
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return ToProblemDetails(exception);
+        }
+    }
+
     [HttpPost("{sessionId:guid}/transfer")]
     [ProducesResponseType<MoneyCommandResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -401,6 +557,7 @@ public sealed class SessionsController : ControllerBase
             "transaction-not-found" => (StatusCodes.Status404NotFound, "Transaction not found."),
             "unauthorized-command" => (StatusCodes.Status401Unauthorized, "Unauthorized command."),
             "stale-session-version" => (StatusCodes.Status409Conflict, "Stale session version."),
+            "invalid-session-status" => (StatusCodes.Status409Conflict, "Invalid session status transition."),
             "duplicate-idempotency-key" => (StatusCodes.Status409Conflict, "Duplicate idempotency key."),
             _ => (StatusCodes.Status400BadRequest, "Invalid request.")
         };

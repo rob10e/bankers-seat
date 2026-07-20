@@ -19,6 +19,7 @@
 - Template field action execution support for `set-field` and `increment-field`, with persisted player field values in authorized snapshots.
 - Template field action execution extension for `toggle-field` with boolean-only validation and authorized snapshot updates.
 - Template composite action execution support for atomic multi-step actions combining supported financial and field operations.
+- Host-authorized session lifecycle command support (`start`, `pause`, `resume`, `complete`) with expected-version and idempotency enforcement.
 - Integration tests for transfer/correction command paths including replay, stale-version rejection, and duplicate-correction protection.
 - Authorized ledger read endpoint with cursor-style pagination over persisted immutable transactions/postings.
 - Authorized session export endpoint returning snapshot plus full immutable ledger history.
@@ -74,7 +75,7 @@ Validate the template model and banker workflow before adding multiplayer comple
 - ~~reconnect credentials.~~
 - ~~lobby.~~
 - host/banker/player roles.
-- session lifecycle.
+- ~~session lifecycle.~~
 - ~~idempotency and versioning.~~
 - ~~responsive phone UI.~~
 - Playwright multiplayer flows.

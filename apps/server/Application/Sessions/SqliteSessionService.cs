@@ -148,6 +148,11 @@ public sealed class SqliteSessionService : ISessionService
             throw new InvalidOperationException("session-not-found");
         }
 
+        if (!string.Equals(sessionEntity.Status, "lobby", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("invalid-session-status");
+        }
+
         var templateSnapshot = await dbContext.TemplateSnapshots
             .SingleAsync(snapshot => snapshot.Id == sessionEntity.TemplateSnapshotId, cancellationToken);
         var joinOrder = await dbContext.Participants
@@ -256,6 +261,86 @@ public sealed class SqliteSessionService : ISessionService
         );
 
         return await BuildSnapshotAsync(sessionId, cancellationToken);
+    }
+
+    public async Task<SessionLifecycleCommandResponse> StartSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        return await TransitionSessionStatusAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            request,
+            "start-session",
+            "active",
+            ["lobby"],
+            cancellationToken
+        );
+    }
+
+    public async Task<SessionLifecycleCommandResponse> PauseSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        return await TransitionSessionStatusAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            request,
+            "pause-session",
+            "paused",
+            ["active"],
+            cancellationToken
+        );
+    }
+
+    public async Task<SessionLifecycleCommandResponse> ResumeSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        return await TransitionSessionStatusAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            request,
+            "resume-session",
+            "active",
+            ["paused"],
+            cancellationToken
+        );
+    }
+
+    public async Task<SessionLifecycleCommandResponse> CompleteSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        return await TransitionSessionStatusAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            request,
+            "complete-session",
+            "completed",
+            ["active", "paused"],
+            cancellationToken
+        );
     }
 
     public async Task<SessionLedgerResponse> GetAuthorizedLedgerPageAsync(
@@ -1106,6 +1191,14 @@ public sealed class SqliteSessionService : ISessionService
         }
     }
 
+    private static void ValidateSessionLifecycleRequest(SessionLifecycleCommandRequest request)
+    {
+        if (request.ExpectedSessionVersion <= 0 || string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            throw new InvalidOperationException("invalid-request");
+        }
+    }
+
     private async Task<(GameSessionEntity Session, ParticipantEntity Actor)> AuthorizeMutationAsync(
         Guid sessionId,
         Guid actorParticipantId,
@@ -1198,6 +1291,86 @@ public sealed class SqliteSessionService : ISessionService
         }
 
         return existing;
+    }
+
+    private async Task<SessionLifecycleCommandResponse> TransitionSessionStatusAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        string commandType,
+        string targetStatus,
+        IReadOnlyCollection<string> allowedCurrentStatuses,
+        CancellationToken cancellationToken
+    )
+    {
+        ValidateSessionLifecycleRequest(request);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var (session, _) = await AuthorizeMutationAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            cancellationToken
+        );
+        var idempotency = await TryLoadIdempotencyRecordAsync(
+            sessionId,
+            actorParticipantId,
+            request.IdempotencyKey,
+            commandType,
+            request,
+            cancellationToken
+        );
+        if (idempotency is not null)
+        {
+            var replayResponse = await BuildSessionLifecycleReplayResponseAsync(sessionId, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return replayResponse;
+        }
+
+        if (session.SessionVersion != request.ExpectedSessionVersion)
+        {
+            throw new InvalidOperationException("stale-session-version");
+        }
+
+        var canTransition = allowedCurrentStatuses.Any(status =>
+            string.Equals(session.Status, status, StringComparison.Ordinal)
+        );
+        if (!canTransition)
+        {
+            throw new InvalidOperationException("invalid-session-status");
+        }
+
+        session.Status = targetStatus;
+        session.SessionVersion += 1;
+        dbContext.IdempotencyRecords.Add(
+            CreateIdempotencyRecord(
+                sessionId,
+                actorParticipantId,
+                request.IdempotencyKey.Trim(),
+                commandType,
+                request,
+                $"{targetStatus}:{session.SessionVersion}"
+            )
+        );
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return new SessionLifecycleCommandResponse(
+            await BuildSnapshotAsync(sessionId, cancellationToken),
+            IdempotentReplay: false
+        );
+    }
+
+    private async Task<SessionLifecycleCommandResponse> BuildSessionLifecycleReplayResponseAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken
+    )
+    {
+        return new SessionLifecycleCommandResponse(
+            await BuildSnapshotAsync(sessionId, cancellationToken),
+            IdempotentReplay: true
+        );
     }
 
     private async Task<MoneyCommandResponse> BuildReplayResponseAsync(

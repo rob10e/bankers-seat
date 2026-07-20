@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using BankersSeat.Server.Api.V1.Contracts;
 using BankersSeat.Server.Application.Templates;
 using BankersSeat.Server.Domain.Accounts;
@@ -117,6 +118,11 @@ public sealed class InMemorySessionService : ISessionService
         lock (mutationLock)
         {
             var session = state.Session;
+            if (session.Status != SessionStatus.Lobby)
+            {
+                throw new InvalidOperationException("invalid-session-status");
+            }
+
             var participant = new Participant(
                 Guid.NewGuid(),
                 session.Id,
@@ -203,6 +209,131 @@ public sealed class InMemorySessionService : ISessionService
         _ = cancellationToken;
         var session = GetAuthorizedSession(sessionId, participantId, reconnectCredential);
         return Task.FromResult(BuildSnapshot(session));
+    }
+
+    public Task<SessionLifecycleCommandResponse> StartSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = cancellationToken;
+        return ApplyLifecycleTransitionAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            request,
+            "start-session",
+            "lobby",
+            "active"
+        );
+    }
+
+    public Task<SessionLifecycleCommandResponse> PauseSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = cancellationToken;
+        return ApplyLifecycleTransitionAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            request,
+            "pause-session",
+            "active",
+            "paused"
+        );
+    }
+
+    public Task<SessionLifecycleCommandResponse> ResumeSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = cancellationToken;
+        return ApplyLifecycleTransitionAsync(
+            sessionId,
+            actorParticipantId,
+            reconnectCredential,
+            request,
+            "resume-session",
+            "paused",
+            "active"
+        );
+    }
+
+    public Task<SessionLifecycleCommandResponse> CompleteSessionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        _ = cancellationToken;
+        ValidateSessionLifecycleRequest(request);
+        var session = GetAuthorizedSession(sessionId, actorParticipantId, reconnectCredential);
+        if (!sessionsById.TryGetValue(sessionId, out var state))
+        {
+            throw new InvalidOperationException("session-not-found");
+        }
+
+        lock (mutationLock)
+        {
+            var idempotencyKey = BuildIdempotencyKey(actorParticipantId, request.IdempotencyKey);
+            var requestHash = ComputeRequestHash(request);
+            if (state.Idempotency.TryGetValue(idempotencyKey, out var existing))
+            {
+                if (
+                    !string.Equals(existing.CommandType, "complete-session", StringComparison.Ordinal)
+                    || !string.Equals(existing.RequestHash, requestHash, StringComparison.Ordinal)
+                )
+                {
+                    throw new InvalidOperationException("duplicate-idempotency-key");
+                }
+
+                return Task.FromResult(
+                    new SessionLifecycleCommandResponse(BuildSnapshot(state.Session), IdempotentReplay: true)
+                );
+            }
+
+            if (session.SessionVersion != request.ExpectedSessionVersion)
+            {
+                throw new InvalidOperationException("stale-session-version");
+            }
+
+            var currentStatus = session.Status.ToString().ToLowerInvariant();
+            if (
+                !string.Equals(currentStatus, "active", StringComparison.Ordinal)
+                && !string.Equals(currentStatus, "paused", StringComparison.Ordinal)
+            )
+            {
+                throw new InvalidOperationException("invalid-session-status");
+            }
+
+            var updatedSession = session with
+            {
+                Status = SessionStatus.Completed,
+                SessionVersion = session.SessionVersion + 1
+            };
+            state.Session = updatedSession;
+            state.Idempotency[idempotencyKey] = new InMemoryIdempotencyRecord(
+                "complete-session",
+                requestHash
+            );
+            return Task.FromResult(
+                new SessionLifecycleCommandResponse(BuildSnapshot(updatedSession), IdempotentReplay: false)
+            );
+        }
     }
 
     public Task<SessionLedgerResponse> GetAuthorizedLedgerPageAsync(
@@ -362,6 +493,82 @@ public sealed class InMemorySessionService : ISessionService
         }
     }
 
+    private static void ValidateSessionLifecycleRequest(SessionLifecycleCommandRequest request)
+    {
+        if (request.ExpectedSessionVersion <= 0 || string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            throw new InvalidOperationException("invalid-request");
+        }
+    }
+
+    private Task<SessionLifecycleCommandResponse> ApplyLifecycleTransitionAsync(
+        Guid sessionId,
+        Guid actorParticipantId,
+        string reconnectCredential,
+        SessionLifecycleCommandRequest request,
+        string commandType,
+        string requiredStatus,
+        string targetStatus
+    )
+    {
+        ValidateSessionLifecycleRequest(request);
+        var session = GetAuthorizedSession(sessionId, actorParticipantId, reconnectCredential);
+        if (!sessionsById.TryGetValue(sessionId, out var state))
+        {
+            throw new InvalidOperationException("session-not-found");
+        }
+
+        lock (mutationLock)
+        {
+            var idempotencyKey = BuildIdempotencyKey(actorParticipantId, request.IdempotencyKey);
+            var requestHash = ComputeRequestHash(request);
+            if (state.Idempotency.TryGetValue(idempotencyKey, out var existing))
+            {
+                if (
+                    !string.Equals(existing.CommandType, commandType, StringComparison.Ordinal)
+                    || !string.Equals(existing.RequestHash, requestHash, StringComparison.Ordinal)
+                )
+                {
+                    throw new InvalidOperationException("duplicate-idempotency-key");
+                }
+
+                return Task.FromResult(
+                    new SessionLifecycleCommandResponse(BuildSnapshot(state.Session), IdempotentReplay: true)
+                );
+            }
+
+            if (session.SessionVersion != request.ExpectedSessionVersion)
+            {
+                throw new InvalidOperationException("stale-session-version");
+            }
+
+            var currentStatus = session.Status.ToString().ToLowerInvariant();
+            if (!string.Equals(currentStatus, requiredStatus, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("invalid-session-status");
+            }
+
+            var updatedStatus = targetStatus switch
+            {
+                "active" => SessionStatus.Active,
+                "paused" => SessionStatus.Paused,
+                _ => throw new InvalidOperationException("invalid-request")
+            };
+
+            var updatedSession = session with
+            {
+                Status = updatedStatus,
+                SessionVersion = session.SessionVersion + 1
+            };
+            state.Session = updatedSession;
+            state.Idempotency[idempotencyKey] = new InMemoryIdempotencyRecord(commandType, requestHash);
+
+            return Task.FromResult(
+                new SessionLifecycleCommandResponse(BuildSnapshot(updatedSession), IdempotentReplay: false)
+            );
+        }
+    }
+
     private static SessionConnectionInfoResponse BuildConnectionInfo()
     {
         return new SessionConnectionInfoResponse("/hubs/game", 1);
@@ -436,6 +643,17 @@ public sealed class InMemorySessionService : ISessionService
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    private static string BuildIdempotencyKey(Guid actorParticipantId, string idempotencyKey)
+    {
+        return $"{actorParticipantId:N}:{idempotencyKey.Trim()}";
+    }
+
+    private static string ComputeRequestHash<T>(T request)
+    {
+        var json = JsonSerializer.Serialize(request);
+        return HashSecret(json);
+    }
+
     private sealed class SessionState
     {
         public SessionState(GameSession session)
@@ -444,5 +662,8 @@ public sealed class InMemorySessionService : ISessionService
         }
 
         public GameSession Session { get; set; }
+        public Dictionary<string, InMemoryIdempotencyRecord> Idempotency { get; } = [];
     }
+
+    private sealed record InMemoryIdempotencyRecord(string CommandType, string RequestHash);
 }

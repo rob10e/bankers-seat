@@ -10,6 +10,10 @@ Implemented in scaffold:
 - `POST /api/v1/sessions/join`
 - `POST /api/v1/sessions/{sessionId}/reconnect`
 - `GET /api/v1/sessions/{sessionId}/snapshot`
+- `POST /api/v1/sessions/{sessionId}/start`
+- `POST /api/v1/sessions/{sessionId}/pause`
+- `POST /api/v1/sessions/{sessionId}/resume`
+- `POST /api/v1/sessions/{sessionId}/complete`
 - `POST /api/v1/sessions/{sessionId}/transfer`
 - `POST /api/v1/sessions/{sessionId}/bank-payments`
 - `POST /api/v1/sessions/{sessionId}/bank-collections`
@@ -107,6 +111,22 @@ Exchanges a valid reconnect credential for refreshed access.
 ### `GET /api/v1/sessions/{sessionId}/snapshot`
 
 Returns the authorized current session view.
+
+### `POST /api/v1/sessions/{sessionId}/start`
+
+Host-authorized lifecycle command. Requires actor headers, expected session version, and idempotency key. Valid only when session status is `lobby`; transitions to `active`.
+
+### `POST /api/v1/sessions/{sessionId}/pause`
+
+Host-authorized lifecycle command. Requires actor headers, expected session version, and idempotency key. Valid only when session status is `active`; transitions to `paused`.
+
+### `POST /api/v1/sessions/{sessionId}/resume`
+
+Host-authorized lifecycle command. Requires actor headers, expected session version, and idempotency key. Valid only when session status is `paused`; transitions to `active`.
+
+### `POST /api/v1/sessions/{sessionId}/complete`
+
+Host-authorized lifecycle command. Requires actor headers, expected session version, and idempotency key. Valid only when session status is `active` or `paused`; transitions to `completed`.
 
 ### `POST /api/v1/sessions/{sessionId}/transfer`
 
