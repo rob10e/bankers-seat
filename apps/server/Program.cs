@@ -29,7 +29,8 @@ builder.Services.AddSingleton<ITemplateCatalogService>(serviceProvider =>
     var templatesRoot = string.IsNullOrWhiteSpace(configuredTemplatesRoot)
         ? Path.GetFullPath(Path.Combine(environment.ContentRootPath, "..", "..", "templates"))
         : Path.GetFullPath(configuredTemplatesRoot);
-    return new FileTemplateCatalogService(templatesRoot);
+    var fileService = new FileTemplateCatalogService(templatesRoot);
+    return new CachedTemplateCatalogService(fileService);
 });
 builder.Services.AddDbContext<BankersSeatDbContext>(options =>
 {

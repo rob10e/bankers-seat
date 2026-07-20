@@ -25,12 +25,12 @@ Implemented in scaffold:
 - `GET /health/ready`
 - `GET /health/templates`
 - `GET /health/version`
+- `POST /api/v1/admin/templates/rescan`
 - SignalR hub path `/hubs/game` with `SubscribeSession` and `RequestResync`
 
 Planned but not implemented yet:
 
 - Template asset serving endpoint
-- Admin template rescan endpoint
 - Full command/event hub surface listed below
 
 ## API conventions
@@ -258,6 +258,27 @@ Reports application and template schema versions for compatibility checking.
   "checkedAtUtc": "2026-07-20T10:00:00Z"
 }
 ```
+
+## Admin endpoints
+
+### `POST /api/v1/admin/templates/rescan`
+
+Operator-only endpoint that reloads the template catalog from the mounted `/templates` directory without requiring a container restart. Useful when templates are updated in self-hosted deployments.
+
+**Authorization**: Host-level administrative access (bearer token or session credential with admin scope).
+
+**Request**: No body required.
+
+**Response** (HTTP 200):
+```json
+{
+  "discoveredTemplateCount": 5,
+  "rescanCompletedAtUtc": "2026-07-20T10:05:00Z",
+  "lastScannedAtUtc": "2026-07-20T10:05:00Z"
+}
+```
+
+The response indicates how many templates were discovered and when the rescan completed. Invalid templates (malformed JSON, missing required fields) are logged but excluded from the catalog.
 
 ## Authorization matrix
 

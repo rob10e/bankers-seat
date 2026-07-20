@@ -17,7 +17,8 @@
 - Integration tests for SignalR session-snapshot broadcasts after accepted mutations (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for authorized ledger retrieval with newest-first pagination and unauthorized access rejection (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for authorized session export retrieval and unauthorized export rejection (`tests/integration/server/session-scaffold-tests.cs`).
-- Integration tests for health check endpoints covering live, ready, templates, and version probes (`tests/integration/server/health-endpoints-tests.cs`).
+- Integration tests for health check endpoints covering live, ready, templates, and version probes (`tests/integration/server/health-checks-tests.cs`).
+- Integration tests for template catalog caching and rescan behavior covering cache refresh, idempotency, and catalog consistency (`tests/integration/server/template-rescan-tests.cs`).
 - Template schema and semantic validation CLI via `pnpm templates:validate`.
 
 ## Quality objectives

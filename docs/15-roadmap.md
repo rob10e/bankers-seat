@@ -26,6 +26,7 @@
 - Authorized ledger read endpoint with cursor-style pagination over persisted immutable transactions/postings.
 - Authorized session export endpoint returning snapshot plus full immutable ledger history.
 - Health check endpoints (`/health/live`, `/health/ready`, `/health/templates`, `/health/version`) for Docker/Kubernetes monitoring and operator diagnostics.
+- Template catalog caching with admin rescan endpoint (`POST /api/v1/admin/templates/rescan`) for zero-downtime template updates in self-hosted deployments.
 
 ### Still pending in immediate roadmap
 
@@ -96,7 +97,7 @@ Validate the template model and banker workflow before adding multiplayer comple
 
 - Docker image and Compose file.
 - ~~mounted template directories.~~
-- template rescan.
+- ~~template rescan.~~
 - ~~health checks.~~
 - backup/restore documentation.
 - administrative diagnostics.
