@@ -1,3 +1,4 @@
+using BankersSeat.Server.Application.Health;
 using BankersSeat.Server.Application.Sessions;
 using BankersSeat.Server.Application.Templates;
 using BankersSeat.Server.Infrastructure.Persistence;
@@ -37,6 +38,7 @@ builder.Services.AddDbContext<BankersSeatDbContext>(options =>
 });
 builder.Services.AddSingleton<ISessionEventBroadcaster, SignalRSessionEventBroadcaster>();
 builder.Services.AddScoped<ISessionService, SqliteSessionService>();
+builder.Services.AddScoped<IHealthService, DefaultHealthService>();
 
 var app = builder.Build();
 
@@ -66,9 +68,5 @@ if (Directory.Exists(webRootPath))
     app.MapFallbackToFile("index.html");
 }
 
-app.MapGet("/health", () =>
-{
-    return Results.Ok(new { status = "ok", timestampUtc = DateTime.UtcNow });
-});
 
 app.Run();

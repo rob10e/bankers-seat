@@ -1,6 +1,6 @@
 # API and Hub Contracts
 
-## Implementation status snapshot (2026-07-18)
+## Implementation status snapshot (2026-07-20)
 
 Implemented in scaffold:
 
@@ -21,6 +21,10 @@ Implemented in scaffold:
 - `POST /api/v1/sessions/{sessionId}/corrections`
 - `GET /api/v1/sessions/{sessionId}/ledger`
 - `GET /api/v1/sessions/{sessionId}/export`
+- `GET /health/live`
+- `GET /health/ready`
+- `GET /health/templates`
+- `GET /health/version`
 - SignalR hub path `/hubs/game` with `SubscribeSession` and `RequestResync`
 
 Planned but not implemented yet:
@@ -197,6 +201,63 @@ Each mutating method receives a command envelope.
 - `PlayerFieldChanged`
 - `SessionResyncRequired`
 - `CommandRejected`
+
+## Health and operational endpoints
+
+### `GET /health/live`
+
+Kubernetes liveness probe. Always returns `200 OK` if the process is running.
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "checkedAtUtc": "2026-07-20T10:00:00Z"
+}
+```
+
+### `GET /health/ready`
+
+Kubernetes readiness probe. Returns `200 OK` if database and critical dependencies are available, otherwise `503 Service Unavailable`.
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "databaseAvailable": true,
+  "templateCatalogCount": 5,
+  "checkedAtUtc": "2026-07-20T10:00:00Z"
+}
+```
+
+### `GET /health/templates`
+
+Reports template catalog status and invalid-template count. Status is `healthy` if no invalid templates, otherwise `degraded`.
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "validTemplateCount": 5,
+  "invalidTemplateCount": 0,
+  "catalogScannedAtUtc": "2026-07-20T10:00:00Z",
+  "checkedAtUtc": "2026-07-20T10:00:00Z"
+}
+```
+
+### `GET /health/version`
+
+Reports application and template schema versions for compatibility checking.
+
+**Response**:
+```json
+{
+  "applicationVersion": "0.1.0",
+  "templateSchemaVersion": 1,
+  "status": "healthy",
+  "checkedAtUtc": "2026-07-20T10:00:00Z"
+}
+```
 
 ## Authorization matrix
 

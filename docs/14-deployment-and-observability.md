@@ -54,12 +54,68 @@ Mounted paths:
 
 ## Health endpoints
 
-- `/health/live` — process is running.
-- `/health/ready` — database and critical dependencies are available.
-- `/health/templates` — catalog scan status and invalid-template count.
-- `/health/version` — application and schema compatibility information.
+### Live probe
 
-Do not expose sensitive configuration in health responses.
+- **Path**: `/health/live`
+- **HTTP method**: `GET`
+- **Status codes**: Always `200 OK`
+- **Purpose**: Kubernetes liveness probe. Confirms the application process is running.
+- **Response**: `{ "status": "healthy", "checkedAtUtc": "ISO-8601-timestamp" }`
+
+### Ready probe
+
+- **Path**: `/health/ready`
+- **HTTP method**: `GET`
+- **Status codes**: `200 OK` (ready) or `503 Service Unavailable` (not ready)
+- **Purpose**: Kubernetes readiness probe. Confirms database is accessible and critical dependencies are available.
+- **Response**: 
+```json
+{
+  "status": "healthy|unhealthy",
+  "databaseAvailable": true,
+  "templateCatalogCount": 5,
+  "checkedAtUtc": "ISO-8601-timestamp"
+}
+```
+
+### Templates health
+
+- **Path**: `/health/templates`
+- **HTTP method**: `GET`
+- **Status codes**: Always `200 OK`
+- **Purpose**: Operator visibility into template catalog status and discovery errors.
+- **Response**:
+```json
+{
+  "status": "healthy|degraded",
+  "validTemplateCount": 5,
+  "invalidTemplateCount": 0,
+  "catalogScannedAtUtc": "ISO-8601-timestamp",
+  "checkedAtUtc": "ISO-8601-timestamp"
+}
+```
+
+Status is `degraded` when `invalidTemplateCount > 0`. Invalid templates are excluded from the catalog but reported so operators can diagnose issues (e.g., malformed JSON, missing required fields, schema violations).
+
+### Version endpoint
+
+- **Path**: `/health/version`
+- **HTTP method**: `GET`
+- **Status codes**: Always `200 OK`
+- **Purpose**: Version compatibility checking and diagnostics.
+- **Response**:
+```json
+{
+  "applicationVersion": "0.1.0",
+  "templateSchemaVersion": 1,
+  "status": "healthy",
+  "checkedAtUtc": "ISO-8601-timestamp"
+}
+```
+
+When upgrading, operators can check this endpoint to confirm the application and schema versions match expectations before proceeding.
+
+Security best practice: Do not expose sensitive configuration (database credentials, keys, internal service URLs) in health responses.
 
 ## Structured logs
 

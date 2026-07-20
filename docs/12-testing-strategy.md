@@ -1,6 +1,6 @@
 # Testing Strategy
 
-## Current baseline coverage (2026-07-18)
+## Current baseline coverage (2026-07-20)
 
 - Web smoke test covering routed app shell render (`apps/web/src/app/app.test.tsx`).
 - Template validation unit tests covering schema, semantic rules, discovery, and JSON parsing (`packages/template-tools/src/validation.test.ts`).
@@ -17,6 +17,7 @@
 - Integration tests for SignalR session-snapshot broadcasts after accepted mutations (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for authorized ledger retrieval with newest-first pagination and unauthorized access rejection (`tests/integration/server/session-scaffold-tests.cs`).
 - Integration tests for authorized session export retrieval and unauthorized export rejection (`tests/integration/server/session-scaffold-tests.cs`).
+- Integration tests for health check endpoints covering live, ready, templates, and version probes (`tests/integration/server/health-endpoints-tests.cs`).
 - Template schema and semantic validation CLI via `pnpm templates:validate`.
 
 ## Quality objectives
