@@ -25,7 +25,6 @@ builder.Services.AddApplicationInsightsTelemetry();
 builder.Services.AddMemoryCache();
 // Rate limiting disabled for now - will configure in Phase 6
 // builder.Services.AddInMemoryRateLimiting();
-// Force hot reload trigger - 2026-07-21T04:11:38Z
 
 var jwtKey = builder.Configuration["Jwt:SigningKey"] ?? Guid.NewGuid().ToString();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
