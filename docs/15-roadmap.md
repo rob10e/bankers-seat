@@ -147,7 +147,7 @@ Validate the template model and banker workflow before adding multiplayer comple
 ### Features
 
 - ~~Import/export package.~~
-- template author CLI.
+- ~~template author CLI.~~
 - visual preview.
 - visual template editor.
 - template diff/migration helper.
