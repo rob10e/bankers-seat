@@ -149,7 +149,7 @@ Validate the template model and banker workflow before adding multiplayer comple
 - ~~Import/export package.~~
 - ~~template author CLI.~~
 - ~~visual preview.~~
-- visual template editor.
+- ~~visual template editor.~~
 - template diff/migration helper.
 - private sharing.
 - marketplace governance and licensing workflow.
