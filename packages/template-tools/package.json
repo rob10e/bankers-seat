@@ -3,8 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "banker-templates": "dist/index.js"
+  },
   "scripts": {
-    "validate": "tsx src/cli.ts",
+    "validate": "tsx src/index.ts validate",
+    "scaffold": "tsx src/index.ts scaffold",
+    "package": "tsx src/index.ts package",
+    "dev-server": "tsx src/index.ts dev-server",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "echo \"No lint configured for @bankers-seat/template-tools\"",
@@ -16,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "archiver": "^7.0.1",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
