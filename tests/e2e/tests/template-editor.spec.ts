@@ -82,13 +82,17 @@ test.describe("Template Editor Flow", () => {
   });
 
   test("should maintain session across draft operations", async ({ page }) => {
+    // Must be on catalog page to have edit buttons
+    await page.goto("http://localhost:5173/templates");
+    await page.waitForLoadState("networkidle");
+    
     // Get initial session ID (should be set on page load)
     const initialSessionId = await page.evaluate(() => {
       return sessionStorage.getItem("bankers-seat:session-user-id");
     });
     
     console.log("Initial session ID:", initialSessionId);
-    expect(initialSessionId).toBeTruthy("Session ID should be initialized on page load");
+    expect(initialSessionId).toBeTruthy();
 
     // Click edit
     await page.locator('button:has-text("Edit template")').first().click();
@@ -139,8 +143,8 @@ test.describe("Template Editor Flow", () => {
       console.log("Session 1:", sessionId1);
       console.log("Session 2:", sessionId2);
 
-      expect(sessionId1).toBeTruthy("Session ID 1 should exist");
-      expect(sessionId2).toBeTruthy("Session ID 2 should exist");
+      expect(sessionId1).toBeTruthy();
+      expect(sessionId2).toBeTruthy();
       expect(sessionId1).not.toBe(sessionId2);
     } finally {
       await context1.close();
