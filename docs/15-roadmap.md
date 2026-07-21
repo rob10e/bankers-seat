@@ -142,11 +142,11 @@ Validate the template model and banker workflow before adding multiplayer comple
 - ~~operational support process.~~
 - ~~scalable SignalR deployment.~~
 
-## Phase 5 — Template ecosystem
+## Phase 5 — Template ecosystem (In Progress)
 
 ### Features
 
-- Import/export package.
+- ~~Import/export package.~~
 - template author CLI.
 - visual preview.
 - visual template editor.
