@@ -32,8 +32,13 @@ public sealed class TemplateDraftController : ControllerBase
         [FromBody] CreateTemplateDraftRequest request,
         CancellationToken ct)
     {
-        // TODO: Extract userId from ClaimsPrincipal when auth is integrated
-        var userId = Guid.NewGuid(); // Placeholder
+        // Extract userId from X-Session-User-Id header (temporary placeholder auth)
+        // TODO: Replace with ClaimsPrincipal when real auth is integrated
+        if (!Request.Headers.TryGetValue("X-Session-User-Id", out var userIdHeader) || userIdHeader.Count == 0)
+        {
+            return BadRequest(new { error = "X-Session-User-Id header required" });
+        }
+        var userId = new Guid(userIdHeader.ToString());
 
         _logger.LogInformation("Creating draft from {TemplateId}/{EditionId}",
             request.TemplateId, request.EditionId);
@@ -63,8 +68,13 @@ public sealed class TemplateDraftController : ControllerBase
         Guid draftId,
         CancellationToken ct)
     {
-        // TODO: Extract userId from ClaimsPrincipal
-        var userId = Guid.NewGuid(); // Placeholder
+        // Extract userId from X-Session-User-Id header (temporary placeholder auth)
+        // TODO: Replace with ClaimsPrincipal when real auth is integrated
+        if (!Request.Headers.TryGetValue("X-Session-User-Id", out var userIdHeader) || userIdHeader.Count == 0)
+        {
+            return BadRequest(new { error = "X-Session-User-Id header required" });
+        }
+        var userId = new Guid(userIdHeader.ToString());
 
         var draft = await _draftService.GetDraftAsync(draftId, userId, ct);
         if (draft == null)
@@ -84,8 +94,13 @@ public sealed class TemplateDraftController : ControllerBase
         [FromQuery] int pageNumber = 1,
         CancellationToken ct = default)
     {
-        // TODO: Extract userId from ClaimsPrincipal
-        var userId = Guid.NewGuid(); // Placeholder
+        // Extract userId from X-Session-User-Id header (temporary placeholder auth)
+        // TODO: Replace with ClaimsPrincipal when real auth is integrated
+        if (!Request.Headers.TryGetValue("X-Session-User-Id", out var userIdHeader) || userIdHeader.Count == 0)
+        {
+            return BadRequest(new { error = "X-Session-User-Id header required" });
+        }
+        var userId = new Guid(userIdHeader.ToString());
 
         var result = await _draftService.ListDraftsAsync(userId, pageSize, pageNumber, ct);
         return Ok(result);
@@ -100,8 +115,13 @@ public sealed class TemplateDraftController : ControllerBase
         [FromBody] UpdateTemplateDraftRequest request,
         CancellationToken ct)
     {
-        // TODO: Extract userId from ClaimsPrincipal
-        var userId = Guid.NewGuid(); // Placeholder
+        // Extract userId from X-Session-User-Id header (temporary placeholder auth)
+        // TODO: Replace with ClaimsPrincipal when real auth is integrated
+        if (!Request.Headers.TryGetValue("X-Session-User-Id", out var userIdHeader) || userIdHeader.Count == 0)
+        {
+            return BadRequest(new { error = "X-Session-User-Id header required" });
+        }
+        var userId = new Guid(userIdHeader.ToString());
 
         _logger.LogInformation("Updating draft {DraftId}", draftId);
 
@@ -122,8 +142,13 @@ public sealed class TemplateDraftController : ControllerBase
         Guid draftId,
         CancellationToken ct)
     {
-        // TODO: Extract userId from ClaimsPrincipal
-        var userId = Guid.NewGuid(); // Placeholder
+        // Extract userId from X-Session-User-Id header (temporary placeholder auth)
+        // TODO: Replace with ClaimsPrincipal when real auth is integrated
+        if (!Request.Headers.TryGetValue("X-Session-User-Id", out var userIdHeader) || userIdHeader.Count == 0)
+        {
+            return BadRequest(new { error = "X-Session-User-Id header required" });
+        }
+        var userId = new Guid(userIdHeader.ToString());
 
         _logger.LogInformation("Deleting draft {DraftId}", draftId);
 
@@ -144,8 +169,13 @@ public sealed class TemplateDraftController : ControllerBase
         Guid draftId,
         CancellationToken ct)
     {
-        // TODO: Extract userId from ClaimsPrincipal
-        var userId = Guid.NewGuid(); // Placeholder
+        // Extract userId from X-Session-User-Id header (temporary placeholder auth)
+        // TODO: Replace with ClaimsPrincipal when real auth is integrated
+        if (!Request.Headers.TryGetValue("X-Session-User-Id", out var userIdHeader) || userIdHeader.Count == 0)
+        {
+            return BadRequest(new { error = "X-Session-User-Id header required" });
+        }
+        var userId = new Guid(userIdHeader.ToString());
 
         _logger.LogInformation("Exporting draft {DraftId}", draftId);
 

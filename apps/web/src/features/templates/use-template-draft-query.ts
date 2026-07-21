@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { getSessionUserId } from "../../utils/session-storage";
 
 interface TemplateDraftResponse {
   draftId: string;
@@ -12,6 +13,13 @@ interface TemplateDraftResponse {
 }
 
 const API_BASE = "/api/v1";
+
+function getHeaders(): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "X-Session-User-Id": getSessionUserId(),
+  };
+}
 
 export interface UseTemplateDraftParams {
   draftId?: string;
@@ -31,7 +39,9 @@ export function useTemplateDraftQuery(
     queryFn: async (): Promise<TemplateDraftResponse | null> => {
       if (!draftId) return null;
 
-      const response = await fetch(`${API_BASE}/templates/drafts/${draftId}`);
+      const response = await fetch(`${API_BASE}/templates/drafts/${draftId}`, {
+        headers: getHeaders(),
+      });
       if (!response.ok) {
         if (response.status === 404) return null;
         throw new Error(`Failed to fetch draft: ${response.statusText}`);
@@ -55,7 +65,7 @@ export function useTemplateDraftQuery(
     }): Promise<TemplateDraftResponse> => {
       const response = await fetch(`${API_BASE}/templates/drafts`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getHeaders(),
         body: JSON.stringify({
           templateId,
           editionId,
@@ -73,7 +83,7 @@ export function useTemplateDraftQuery(
     mutationFn: async (data: { draftId: string; templateData: object }): Promise<TemplateDraftResponse> => {
       const response = await fetch(`${API_BASE}/templates/drafts/${data.draftId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getHeaders(),
         body: JSON.stringify({ templateData: data.templateData }),
       });
       if (!response.ok) throw new Error("Failed to update draft");
@@ -91,6 +101,7 @@ export function useTemplateDraftQuery(
     mutationFn: async (draftId: string) => {
       const response = await fetch(`${API_BASE}/templates/drafts/${draftId}`, {
         method: "DELETE",
+        headers: getHeaders(),
       });
       if (!response.ok) throw new Error("Failed to delete draft");
     },
@@ -99,7 +110,9 @@ export function useTemplateDraftQuery(
   // Export draft as JSON
   const exportDraftMutation = useMutation({
     mutationFn: async (draftId: string) => {
-      const response = await fetch(`${API_BASE}/templates/drafts/${draftId}/export`);
+      const response = await fetch(`${API_BASE}/templates/drafts/${draftId}/export`, {
+        headers: getHeaders(),
+      });
       if (!response.ok) throw new Error("Failed to export draft");
 
       const blob = await response.blob();

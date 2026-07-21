@@ -60,6 +60,7 @@ export function TemplateEditorScreen({
   const [isDirty, setIsDirty] = useState(false);
   const [jsonInput, setJsonInput] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | undefined>();
   const draftInitializedRef = useRef(false);
 
   const {
@@ -69,13 +70,17 @@ export function TemplateEditorScreen({
     createDraft,
     updateDraft,
     exportDraft,
-  } = useTemplateDraftQuery();
+  } = useTemplateDraftQuery({ draftId });
 
   // Initialize draft on mount - only once per template
   useEffect(() => {
     if (templateId && editionId && templateVersion && !draftInitializedRef.current) {
       draftInitializedRef.current = true;
-      createDraft(templateId, editionId, templateVersion).catch(console.error);
+      createDraft(templateId, editionId, templateVersion)
+        .then((newDraft) => {
+          setDraftId(newDraft.draftId);
+        })
+        .catch(console.error);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId, editionId, templateVersion]);
