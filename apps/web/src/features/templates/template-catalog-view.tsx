@@ -106,6 +106,16 @@ export function TemplateCatalogView() {
                 >
                   Select template
                 </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    navigate(
+                      `/templates/edit/${entry.templateId}/${entry.editionId}/${entry.templateVersion}`
+                    );
+                  }}
+                >
+                  Edit template
+                </Button>
               </CardActions>
             </Card>
           </Grid>
