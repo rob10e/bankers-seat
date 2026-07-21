@@ -11,10 +11,17 @@ namespace BankersSeat.Server.Api.V1;
 public sealed class TemplatesController : ControllerBase
 {
     private readonly ITemplateCatalogService templateCatalogService;
+    private readonly ITemplateDiffService diffService;
+    private readonly ILogger<TemplatesController> logger;
 
-    public TemplatesController(ITemplateCatalogService templateCatalogService)
+    public TemplatesController(
+        ITemplateCatalogService templateCatalogService,
+        ITemplateDiffService diffService,
+        ILogger<TemplatesController> logger)
     {
         this.templateCatalogService = templateCatalogService;
+        this.diffService = diffService;
+        this.logger = logger;
     }
 
     [HttpGet]
@@ -92,6 +99,80 @@ public sealed class TemplatesController : ControllerBase
         );
 
         return Ok(response);
+    }
+
+    [HttpGet("{templateId}/diff")]
+    [ProducesResponseType<TemplateDiffResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TemplateDiffResponse>> DiffTemplateVersions(
+        [FromRoute] string templateId,
+        [FromQuery] string fromEditionId,
+        [FromQuery] string fromVersion,
+        [FromQuery] string toEditionId,
+        [FromQuery] string toVersion,
+        CancellationToken cancellationToken
+    )
+    {
+        if (string.IsNullOrWhiteSpace(fromEditionId) || string.IsNullOrWhiteSpace(fromVersion) ||
+            string.IsNullOrWhiteSpace(toEditionId) || string.IsNullOrWhiteSpace(toVersion))
+        {
+            return BadRequest(new
+            {
+                error = "Missing query parameters",
+                required = new[] { "fromEditionId", "fromVersion", "toEditionId", "toVersion" }
+            });
+        }
+
+        var fromSnapshot = await templateCatalogService.GetTemplateSnapshotAsync(
+            templateId,
+            fromEditionId,
+            fromVersion,
+            cancellationToken
+        );
+
+        if (fromSnapshot is null)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "From template not found.",
+                detail: $"No template found for {templateId}/{fromEditionId}/{fromVersion}",
+                extensions: new Dictionary<string, object?> { ["code"] = "from-template-not-found" }
+            );
+        }
+
+        var toSnapshot = await templateCatalogService.GetTemplateSnapshotAsync(
+            templateId,
+            toEditionId,
+            toVersion,
+            cancellationToken
+        );
+
+        if (toSnapshot is null)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "To template not found.",
+                detail: $"No template found for {templateId}/{toEditionId}/{toVersion}",
+                extensions: new Dictionary<string, object?> { ["code"] = "to-template-not-found" }
+            );
+        }
+
+        try
+        {
+            var diff = await diffService.DiffTemplatesAsync(fromSnapshot, toSnapshot, cancellationToken);
+            return Ok(diff);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error computing template diff");
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Failed to compute diff.",
+                detail: ex.Message,
+                extensions: new Dictionary<string, object?> { ["code"] = "diff-computation-failed" }
+            );
+        }
     }
 
     private static TemplateCatalogEntryResponse ToCatalogEntryResponse(TemplateCatalogEntry entry)

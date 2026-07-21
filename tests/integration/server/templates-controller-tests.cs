@@ -2,6 +2,7 @@ using BankersSeat.Server.Api.V1;
 using BankersSeat.Server.Api.V1.Contracts;
 using BankersSeat.Server.Application.Templates;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace BankersSeat.Server.Tests.Integration;
@@ -16,7 +17,10 @@ public sealed class TemplatesControllerTests
     [Fact]
     public async Task GetTemplateByVersionReturnsDetailedTemplateForKnownIdentity()
     {
-        var controller = new TemplatesController(catalogService);
+        var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        var logger = loggerFactory.CreateLogger<TemplatesController>();
+        var diffService = new TemplateDiffService(loggerFactory.CreateLogger<TemplateDiffService>());
+        var controller = new TemplatesController(catalogService, diffService, logger);
 
         var result = await controller.GetTemplateByVersion(
             "generic-property-trading",
@@ -37,7 +41,10 @@ public sealed class TemplatesControllerTests
     [Fact]
     public async Task GetTemplateByVersionReturnsNotFoundForUnknownIdentity()
     {
-        var controller = new TemplatesController(catalogService);
+        var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        var logger = loggerFactory.CreateLogger<TemplatesController>();
+        var diffService = new TemplateDiffService(loggerFactory.CreateLogger<TemplateDiffService>());
+        var controller = new TemplatesController(catalogService, diffService, logger);
 
         var result = await controller.GetTemplateByVersion(
             "missing-template",

@@ -1,5 +1,6 @@
 using BankersSeat.Server.Api.V1.Contracts;
 using BankersSeat.Server.Application.Templates;
+using BankersSeat.Server.Domain.Templates;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using Moq;
@@ -26,10 +27,14 @@ public class TemplateDraftServiceTests
     private static TemplateSnapshot CreateMockSnapshot(string templateId = "test-template")
     {
         return new TemplateSnapshot(
-            identity: new TemplateIdentity(templateId, "edition-1", "1.0.0"),
-            templateJson: new { id = templateId, name = "Test Template" },
-            templateContentHash: "hash123",
-            loadedAtUtc: DateTime.UtcNow);
+            Id: Guid.NewGuid(),
+            Identity: new TemplateIdentity(templateId, "edition-1", "1.0.0"),
+            SchemaVersion: 1,
+            ContentHash: "hash123",
+            TemplateJson: "{\"id\":\"" + templateId + "\"}",
+            StartingPlayerBalance: 1500,
+            AllowPlayerOverdraft: false,
+            CreatedAtUtc: DateTime.UtcNow);
     }
 
     [Fact]

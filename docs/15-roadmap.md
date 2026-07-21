@@ -98,7 +98,7 @@ Validate the template model and banker workflow before adding multiplayer comple
 
 ### Features
 
-- ~~Room code~~ and QR joining.
+- ~~Room code and QR joining.~~
 - ~~Multiple devices.~~
 - ~~SignalR updates.~~
 - ~~reconnect credentials.~~
@@ -150,7 +150,11 @@ Validate the template model and banker workflow before adding multiplayer comple
 - ~~template author CLI.~~
 - ~~visual preview.~~
 - ~~visual template editor.~~
-- template diff/migration helper.
+- ~~template diff/migration helper.~~ ✅ (2026-07-21)
+  - Backend: `ITemplateDiffService` with breaking change detection for bank mode, overdraft policy, removed denominations/fields
+  - API: `GET /api/v1/templates/{id}/diff?from={v1}&to={v2}` endpoint with structured response
+  - Frontend: `useTemplateDiffQuery` hook and `TemplateDiffComparison` tabbed UI component
+  - Tests: 13 unit/integration tests + E2E coverage, all passing
 - private sharing.
 - marketplace governance and licensing workflow.
 
@@ -198,12 +202,15 @@ Potential features:
 
 ### Should
 
-- QR join.
 - banker console.
 - batch payday.
 - session export.
 - PWA.
 - template diagnostics.
+
+### Completed
+
+- ~~QR join.~~
 
 ### Could
 
