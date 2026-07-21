@@ -24,8 +24,6 @@ builder.Services.AddApplicationInsightsTelemetry();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddInMemoryRateLimiting();
-builder.Services.Configure<IpRateLimitOptions>(builder.Configuration.GetSection("IpRateLimit"));
-builder.Services.AddSingleton<IRateLimitConfiguration, IpRateLimitConfiguration>();
 
 var jwtKey = builder.Configuration["Jwt:SigningKey"] ?? Guid.NewGuid().ToString();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
