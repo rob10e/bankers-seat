@@ -23,26 +23,8 @@ builder.Services.AddRouting(options => options.LowercaseUrls = true);
 builder.Services.AddApplicationInsightsTelemetry();
 
 builder.Services.AddMemoryCache();
-
-// Configure rate limiting with default IP rate limit options
-builder.Services.Configure<IpRateLimitOptions>(options =>
-{
-    options.EnableEndpointRateLimiting = true;
-    options.StackBlockedRequests = false;
-    options.HttpStatusCode = 429;
-    options.RealIpHeader = "X-Real-IP";
-    options.ClientIdHeader = "X-ClientId";
-    options.GeneralRules = new System.Collections.Generic.List<RateLimitRule>
-    {
-        new RateLimitRule
-        {
-            Endpoint = "*",
-            Period = "1m",
-            Limit = 100
-        }
-    };
-});
-builder.Services.AddInMemoryRateLimiting();
+// Rate limiting disabled for now - will configure in Phase 6
+// builder.Services.AddInMemoryRateLimiting();
 
 var jwtKey = builder.Configuration["Jwt:SigningKey"] ?? Guid.NewGuid().ToString();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -132,7 +114,8 @@ builder.Services.AddSingleton<ITemplateDraftService, TemplateDraftService>();
 
 var app = builder.Build();
 
-app.UseIpRateLimiting();
+// Rate limiting disabled for now - will configure in Phase 6
+// app.UseIpRateLimiting();
 
 using (var scope = app.Services.CreateScope())
 {
