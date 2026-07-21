@@ -1,4 +1,6 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { useEffect } from "react";
+import { getSessionUserId } from "./utils/session-storage.ts";
 import { AppShell } from "./app/app-shell.tsx";
 import { GameWorkspaceView } from "./features/game/game-workspace-view.tsx";
 import { HomeView } from "./features/home/home-view.tsx";
@@ -27,6 +29,11 @@ function TemplateEditorRouteWrapper() {
 }
 
 export function App() {
+  // Initialize session user ID on app load
+  useEffect(() => {
+    getSessionUserId();
+  }, []);
+
   return (
     <AppShell>
       <InstallPrompt />
