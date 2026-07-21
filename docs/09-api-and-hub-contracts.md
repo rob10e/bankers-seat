@@ -278,6 +278,61 @@ Operator-only endpoint that reloads the template catalog from the mounted `/temp
 }
 ```
 
+### `GET /api/v1/admin/diagnostics`
+
+Comprehensive operator diagnostics endpoint providing system health, database status, session activity, ledger consistency, template validation, and recent error information. Useful for self-hosted deployments to troubleshoot issues.
+
+**Authorization**: Administrative access (same as rescan).
+
+**Response** (HTTP 200):
+```json
+{
+  "status": "healthy",
+  "database": {
+    "isAccessible": true,
+    "databaseSizeBytes": 1048576,
+    "tableCount": 13,
+    "lastBackupMessage": "No backup recorded",
+    "status": "healthy"
+  },
+  "sessions": {
+    "totalSessions": 42,
+    "activeSessions": 3,
+    "lobbyCount": 1,
+    "pausedCount": 0,
+    "completedCount": 38,
+    "totalParticipants": 187,
+    "activeParticipants": 9
+  },
+  "ledger": {
+    "isConsistent": true,
+    "totalTransactions": 512,
+    "transactionsLastHour": 8,
+    "totalPostingAmount": 0,
+    "inconsistencyDetails": null,
+    "status": "healthy"
+  },
+  "templates": {
+    "validTemplates": 5,
+    "invalidTemplates": 0,
+    "cachedTemplates": 5,
+    "invalidTemplateIds": [],
+    "status": "healthy"
+  },
+  "recentErrors": {
+    "errorCountLastHour": 0,
+    "errorCountLastDay": 0,
+    "recentErrorMessages": [],
+    "recentExceptionTypes": [],
+    "status": "healthy"
+  },
+  "checkedAtUtc": "2026-07-20T10:10:00Z"
+}
+```
+
+Each diagnostic section includes a `status` field: `"healthy"`, `"degraded"`, or `"critical"`. The top-level `status` is `"healthy"` only when all sections are non-critical.
+
+
 The response indicates how many templates were discovered and when the rescan completed. Invalid templates (malformed JSON, missing required fields) are logged but excluded from the catalog.
 
 ## Authorization matrix

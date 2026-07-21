@@ -1,3 +1,4 @@
+using BankersSeat.Server.Application.Diagnostics;
 using BankersSeat.Server.Application.Health;
 using BankersSeat.Server.Application.Sessions;
 using BankersSeat.Server.Application.Templates;
@@ -40,6 +41,7 @@ builder.Services.AddDbContext<BankersSeatDbContext>(options =>
 builder.Services.AddSingleton<ISessionEventBroadcaster, SignalRSessionEventBroadcaster>();
 builder.Services.AddScoped<ISessionService, SqliteSessionService>();
 builder.Services.AddScoped<IHealthService, DefaultHealthService>();
+builder.Services.AddScoped<IDiagnosticsService, DiagnosticsService>();
 
 var app = builder.Build();
 

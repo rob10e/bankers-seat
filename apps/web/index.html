@@ -3,11 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>web</title>
+    <meta name="theme-color" content="#667eea" />
+    <meta name="description" content="A multiplayer banker companion app for tabletop games" />
+    <meta name="apple-mobile-web-app-capable" content="true" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Banker's Seat" />
+    <meta name="apple-mobile-web-app-icon" href="/favicon.svg" />
+    <title>Banker's Seat</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/pwa/register-service-worker.ts"></script>
   </body>
 </html>

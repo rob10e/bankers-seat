@@ -28,6 +28,9 @@
 - `18-accessibility-plan.md` — WCAG target and table-side usability.
 - `19-risks-and-open-decisions.md` — important risks and recommended defaults.
 - `20-glossary.md` — shared product and engineering vocabulary.
+- `21-backup-and-restore.md` — backup strategies, automated scripts, and disaster recovery procedures.
+- `22-admin-diagnostics.md` — diagnostics console, API endpoint, and monitoring/alerting setup.
+- `23-pwa-installation.md` — PWA installation, offline support, service worker caching strategies.
 
 ## Architecture decisions
 

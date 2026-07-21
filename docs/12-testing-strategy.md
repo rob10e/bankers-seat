@@ -20,6 +20,16 @@
 - Integration tests for health check endpoints covering live, ready, templates, and version probes (`tests/integration/server/health-checks-tests.cs`).
 - Integration tests for template catalog caching and rescan behavior covering cache refresh, idempotency, and catalog consistency (`tests/integration/server/template-rescan-tests.cs`).
 - Template schema and semantic validation CLI via `pnpm templates:validate`.
+- **Playwright multiplayer E2E tests covering Phase 2 exit criteria:**
+  - Multi-device consistency during active gameplay
+  - Idempotent transaction submission (duplicate protection)
+  - Session persistence and identity preservation after page refresh
+  - Transaction correction auditability with full ledger trail
+  - Bank payments with cross-device balance synchronization
+  - Atomic player-to-player transfers
+  - Session lifecycle (create, join, start, complete, export)
+  - Error handling (invalid room codes, stale session versions, insufficient funds)
+  - (`tests/e2e/tests/multiplayer.spec.ts`)
 
 ## Quality objectives
 

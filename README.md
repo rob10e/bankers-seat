@@ -69,6 +69,30 @@ bankers-seat/
 - `pnpm run templates:validate` scans `templates/**/template.json` and validates schema plus semantic rules.
 - The web dev server proxies `/api/*` and `/hubs/*` to `http://localhost:5266`, so run `dev:server` before host/join flows.
 
+## Docker deployment and operations
+
+For production self-hosted deployments:
+
+- **Docker image and Compose file** — Build and run in production environments
+- **`backup.sh`** — Automated backup with integrity verification and retention policies
+- **`restore.sh`** — Interactive restore from backup with multiple methods and verification
+- **`docs/21-backup-and-restore.md`** — Comprehensive backup/restore guide for operators
+
+Quick operations:
+```bash
+# Start services with Docker Compose
+docker compose up -d
+
+# Create an immediate backup
+./backup.sh
+
+# Restore from backup
+./restore.sh
+
+# See full documentation
+cat docs/21-backup-and-restore.md
+```
+
 ## Current implementation snapshot
 
 - Web app includes routes for home, templates, host setup, join, and game workspace.

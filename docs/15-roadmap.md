@@ -1,6 +1,6 @@
 # Roadmap
 
-## Current delivery status (2026-07-20)
+## Current delivery status (2026-07-21)
 
 ### Completed now
 
@@ -27,6 +27,16 @@
 - Authorized session export endpoint returning snapshot plus full immutable ledger history.
 - Health check endpoints (`/health/live`, `/health/ready`, `/health/templates`, `/health/version`) for Docker/Kubernetes monitoring and operator diagnostics.
 - Template catalog caching with admin rescan endpoint (`POST /api/v1/admin/templates/rescan`) for zero-downtime template updates in self-hosted deployments.
+- Playwright multiplayer E2E test suite with 11 test scenarios covering Phase 2 exit criteria: multi-device consistency, idempotent submissions, refresh/reconnect identity preservation, transaction auditability, balance synchronization, atomic transfers, lifecycle, error handling, and session export.
+- Comprehensive backup and restore documentation (docs/21-backup-and-restore.md) with 4 strategies (manual, automated daily, volume snapshots, file replacement), disaster recovery procedures, retention policy, sizing calculator, and 5 troubleshooting scenarios.
+- Backup automation scripts (backup.sh, restore.sh) with cron integration, configurable retention, integrity verification, and comprehensive logging.
+- Admin diagnostics API endpoint (`GET /api/v1/admin/diagnostics`) with database health, session statistics, ledger consistency validation, template validation status, and error log aggregation.
+- Admin diagnostics web console (wwwroot/admin/diagnostics.html) with real-time dashboard, color-coded status indicators, auto-refresh, and operator-friendly alerts.
+- Progressive Web App (PWA) installation support with manifest.json, service worker caching (network-first for APIs, cache-first for assets), offline capability, and graceful degradation.
+- Service worker pre-caching of static assets, intelligent cache versioning, and periodic update checks.
+- Install prompts for desktop (Chrome/Edge/Firefox) and mobile (iOS Safari, Android Chrome) with React hooks integration.
+- Offline indicators and update prompts with graceful fallback to cached responses when disconnected.
+- PWA documentation (docs/23-pwa-installation.md) covering installation methods, architecture, offline behavior, testing strategies, and troubleshooting.
 
 ### Still pending in immediate roadmap
 
@@ -74,35 +84,35 @@ Validate the template model and banker workflow before adding multiplayer comple
 ### Features
 
 - ~~Room code~~ and QR joining.
-- Multiple devices.
+- ~~Multiple devices.~~
 - ~~SignalR updates.~~
 - ~~reconnect credentials.~~
 - ~~lobby.~~
-- host/banker/player roles.
+- ~~host/banker/player roles.~~
 - ~~session lifecycle.~~
 - ~~idempotency and versioning.~~
 - ~~responsive phone UI.~~
-- Playwright multiplayer flows.
+- ~~Playwright multiplayer flows.~~
 
 ### Exit criteria
 
-- Two or more devices remain consistent through normal gameplay.
-- Duplicate submissions do not duplicate transactions.
-- Refresh/reconnect preserves identity.
-- Host correction is auditable.
+- ~~Two or more devices remain consistent through normal gameplay.~~
+- ~~Duplicate submissions do not duplicate transactions.~~
+- ~~Refresh/reconnect preserves identity.~~
+- ~~Host correction is auditable.~~
 
 ## Phase 3 — Self-hosted release
 
 ### Features
 
-- Docker image and Compose file.
+- ~~Docker image and Compose file.~~
 - ~~mounted template directories.~~
 - ~~template rescan.~~
 - ~~health checks.~~
-- backup/restore documentation.
-- administrative diagnostics.
-- export.
-- PWA installation.
+- ~~backup/restore documentation.~~
+- ~~administrative diagnostics.~~
+- ~~export.~~
+- ~~PWA installation.~~
 
 ## Phase 4 — Hosted production
 

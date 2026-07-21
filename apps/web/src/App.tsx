@@ -6,10 +6,15 @@ import { HostSetupView } from "./features/host/host-setup-view.tsx";
 import { JoinRoomView } from "./features/join/join-room-view.tsx";
 import { SettingsView } from "./features/settings/settings-view.tsx";
 import { TemplateCatalogView } from "./features/templates/template-catalog-view.tsx";
+import { InstallPrompt } from "./pwa/install-prompt.tsx";
+import { OfflineIndicator, UpdatePrompt } from "./pwa/offline-indicator.tsx";
 
 export function App() {
   return (
     <AppShell>
+      <InstallPrompt />
+      <OfflineIndicator />
+      <UpdatePrompt />
       <Routes>
         <Route path="/" element={<HomeView />} />
         <Route path="/templates" element={<TemplateCatalogView />} />

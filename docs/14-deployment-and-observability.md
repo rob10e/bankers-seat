@@ -52,6 +52,37 @@ Mounted paths:
 - Data-protection keys.
 - backups.
 
+## Backup and Restore
+
+**For comprehensive backup and restore procedures, see [`docs/21-backup-and-restore.md`](./21-backup-and-restore.md)**
+
+Quick reference:
+
+**Automated daily backups:**
+```bash
+# Add to crontab for daily 2 AM backups
+0 2 * * * cd /path/to/bankers-seat && ./backup.sh >> backup.log 2>&1
+```
+
+**Manual backup:**
+```bash
+./backup.sh --backup-dir ./backups
+```
+
+**Restore from backup:**
+```bash
+./restore.sh --backup /path/to/backup.db
+```
+
+**Verify backup without restoring:**
+```bash
+./restore.sh --backup /path/to/backup.db --verify-only
+```
+
+Included scripts:
+- `backup.sh` — Automated backup with integrity verification and retention
+- `restore.sh` — Interactive restore with multiple methods and verification
+
 ## Health endpoints
 
 ### Live probe

@@ -1,4 +1,5 @@
 using BankersSeat.Server.Api.V1.Contracts;
+using BankersSeat.Server.Application.Diagnostics;
 using BankersSeat.Server.Application.Templates;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,8 +10,12 @@ namespace BankersSeat.Server.Api.V1;
 public sealed class AdminController : ControllerBase
 {
     private readonly CachedTemplateCatalogService catalogService;
+    private readonly IDiagnosticsService diagnosticsService;
 
-    public AdminController(ITemplateCatalogService templateCatalogService)
+    public AdminController(
+        ITemplateCatalogService templateCatalogService,
+        IDiagnosticsService diagnosticsService
+    )
     {
         if (templateCatalogService is not CachedTemplateCatalogService cached)
         {
@@ -20,6 +25,7 @@ public sealed class AdminController : ControllerBase
         }
 
         this.catalogService = cached;
+        this.diagnosticsService = diagnosticsService;
     }
 
     [HttpPost("templates/rescan")]
@@ -37,5 +43,15 @@ public sealed class AdminController : ControllerBase
             RescanCompletedAtUtc: DateTimeOffset.UtcNow,
             LastScannedAtUtc: catalogService.GetLastScannedUtc()
         ));
+    }
+
+    [HttpGet("diagnostics")]
+    [ProducesResponseType<DiagnosticsResponse>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<DiagnosticsResponse>> GetDiagnostics(
+        CancellationToken cancellationToken
+    )
+    {
+        var diagnostics = await diagnosticsService.GetDiagnosticsAsync(cancellationToken);
+        return Ok(diagnostics);
     }
 }
