@@ -110,6 +110,7 @@ builder.Services.AddScoped<IDataRetentionService, DataRetentionService>();
 
 // Phase 5 — Template Ecosystem
 builder.Services.AddScoped<ITemplatePackageService, TemplatePackageService>();
+builder.Services.AddSingleton<ITemplateDraftService, TemplateDraftService>();
 
 var app = builder.Build();
 
