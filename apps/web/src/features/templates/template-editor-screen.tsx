@@ -75,7 +75,8 @@ export function TemplateEditorScreen({
     if (templateId && editionId && templateVersion && !draft) {
       createDraft(templateId, editionId, templateVersion).catch(console.error);
     }
-  }, [templateId, editionId, templateVersion, draft, createDraft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId, editionId, templateVersion, draft]);
 
   // Update JSON editor when draft changes
   useEffect(() => {
