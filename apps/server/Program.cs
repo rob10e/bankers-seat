@@ -108,6 +108,9 @@ builder.Services.AddScoped<IRoomSecurityService, RoomSecurityService>();
 builder.Services.AddScoped<ISessionMetadataService, SessionMetadataService>();
 builder.Services.AddScoped<IDataRetentionService, DataRetentionService>();
 
+// Phase 5 — Template Ecosystem
+builder.Services.AddScoped<ITemplatePackageService, TemplatePackageService>();
+
 var app = builder.Build();
 
 app.UseIpRateLimiting();
