@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -60,6 +60,7 @@ export function TemplateEditorScreen({
   const [isDirty, setIsDirty] = useState(false);
   const [jsonInput, setJsonInput] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const draftInitializedRef = useRef(false);
 
   const {
     draft,
@@ -70,13 +71,13 @@ export function TemplateEditorScreen({
     exportDraft,
   } = useTemplateDraftQuery();
 
-  // Initialize draft on mount
+  // Initialize draft on mount - only once per template
   useEffect(() => {
-    if (templateId && editionId && templateVersion && !draft) {
+    if (templateId && editionId && templateVersion && !draftInitializedRef.current) {
+      draftInitializedRef.current = true;
       createDraft(templateId, editionId, templateVersion).catch(console.error);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [templateId, editionId, templateVersion, draft]);
+  }, [templateId, editionId, templateVersion, createDraft]);
 
   // Update JSON editor when draft changes
   useEffect(() => {
