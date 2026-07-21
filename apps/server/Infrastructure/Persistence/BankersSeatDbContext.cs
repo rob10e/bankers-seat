@@ -24,6 +24,18 @@ public sealed class BankersSeatDbContext : DbContext
 
     public DbSet<PlayerFieldValueEntity> PlayerFieldValues => Set<PlayerFieldValueEntity>();
 
+    public DbSet<UserAccountEntity> UserAccounts => Set<UserAccountEntity>();
+
+    public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
+
+    public DbSet<AuditLogEntity> AuditLogs => Set<AuditLogEntity>();
+
+    public DbSet<SessionMetadataEntity> SessionMetadata => Set<SessionMetadataEntity>();
+
+    public DbSet<JoinLinkEntity> JoinLinks => Set<JoinLinkEntity>();
+
+    public DbSet<SessionTtlPolicyEntity> SessionTtlPolicies => Set<SessionTtlPolicyEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<GameSessionEntity>(entity =>
@@ -116,5 +128,63 @@ public sealed class BankersSeatDbContext : DbContext
             entity.HasIndex(record => new { record.SessionId, record.ParticipantId, record.FieldId }).IsUnique();
             entity.HasIndex(record => new { record.SessionId, record.ParticipantId });
         });
+
+        modelBuilder.Entity<UserAccountEntity>(entity =>
+        {
+            entity.ToTable("user_accounts");
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.Email).HasMaxLength(256).IsRequired();
+            entity.Property(record => record.DisplayName).HasMaxLength(100).IsRequired();
+            entity.HasIndex(record => record.Email).IsUnique();
+            entity.HasIndex(record => record.CreatedAtUtc);
+        });
+
+        modelBuilder.Entity<RefreshTokenEntity>(entity =>
+        {
+            entity.ToTable("refresh_tokens");
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.TokenHash).HasMaxLength(128).IsRequired();
+            entity.HasIndex(record => new { record.UserId, record.ExpiresAtUtc });
+            entity.HasIndex(record => record.CreatedAtUtc);
+        });
+
+        modelBuilder.Entity<AuditLogEntity>(entity =>
+        {
+            entity.ToTable("audit_logs");
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.Action).HasMaxLength(100).IsRequired();
+            entity.Property(record => record.IpAddress).HasMaxLength(45);
+            entity.HasIndex(record => record.SessionId);
+            entity.HasIndex(record => record.ActorUserId);
+            entity.HasIndex(record => record.CreatedAtUtc);
+            entity.HasIndex(record => new { record.SessionId, record.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<SessionMetadataEntity>(entity =>
+        {
+            entity.ToTable("session_metadata");
+            entity.HasKey(record => record.SessionId);
+            entity.Property(record => record.Label).HasMaxLength(200).IsRequired();
+            entity.HasIndex(record => record.OwnerUserId);
+            entity.HasIndex(record => record.LastAccessedAtUtc);
+        });
+
+        modelBuilder.Entity<JoinLinkEntity>(entity =>
+        {
+            entity.ToTable("join_links");
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.LinkToken).HasMaxLength(128).IsRequired();
+            entity.HasIndex(record => record.LinkToken).IsUnique();
+            entity.HasIndex(record => new { record.SessionId, record.ExpiresAtUtc });
+        });
+
+        modelBuilder.Entity<SessionTtlPolicyEntity>(entity =>
+        {
+            entity.ToTable("session_ttl_policies");
+            entity.HasKey(record => record.SessionId);
+            entity.HasIndex(record => record.ExpiresAtUtc);
+            entity.HasIndex(record => record.IsArchived);
+        });
     }
 }
+

@@ -2,7 +2,7 @@
 
 ## Current delivery status (2026-07-21)
 
-### Completed now
+### Phase 3 Complete ✅ (2026-07-21)
 
 - Monorepo scaffold (`apps/web`, `apps/server`, `packages/*`, `tests/*`) with pnpm workspace and .NET solution.
 - Web UI scaffold with responsive desktop/mobile navigation, settings, theme mode support, and routed screens for template catalog, host setup, join, and game workspace.
@@ -38,9 +38,24 @@
 - Offline indicators and update prompts with graceful fallback to cached responses when disconnected.
 - PWA documentation (docs/23-pwa-installation.md) covering installation methods, architecture, offline behavior, testing strategies, and troubleshooting.
 
+### Phase 4 Complete ✅ (2026-07-21)
+
+- PostgreSQL database support with dual-provider configuration (SQLite for dev, PostgreSQL for production) and connection pooling.
+- User account system with JWT authentication, secure registration/login, and refresh token rotation.
+- Account system with BCrypt password hashing (12-round work factor), token validation middleware, and profile endpoints.
+- Saved sessions metadata (ownership, labels, creation/access times, participant counts) with pagination support.
+- Room security enhancements: 8-character room codes, temporary expiring join links, and IP-based rate limiting.
+- Audit logging system capturing actor, action, timestamp, IP address, and result for all sensitive operations.
+- Data retention and privacy controls with configurable TTL policies, auto-cleanup, and GDPR user deletion cascading.
+- Administrative support operations: session lookup, force pause/resume/delete, and complete audit trail of admin actions.
+- Application Insights telemetry integration (ready for configuration) with structured logging on all services.
+- Rate limiting middleware with configurable thresholds per endpoint and operator-friendly response headers.
+- Phase 4 documentation (docs/24-phase4-hosted-production.md) with API contracts, security considerations, and deployment guidance.
+- All Phase 4 features fully backward compatible with Phase 1–3 (guest sessions and anonymous operations still supported).
+
 ### Still pending in immediate roadmap
 
-- No immediate template-operation gaps are currently tracked.
+- No immediate Phase 4 gaps. Phase 5 — Template Ecosystem ready to begin.
 
 ## Phase 0 — Foundation and validation
 
@@ -118,14 +133,14 @@ Validate the template model and banker workflow before adding multiplayer comple
 
 ### Features
 
-- PostgreSQL.
-- account system.
-- saved/recent sessions.
-- stronger room security.
-- observability.
-- retention controls.
-- operational support process.
-- scalable SignalR deployment.
+- ~~PostgreSQL.~~
+- ~~account system.~~
+- ~~saved/recent sessions.~~
+- ~~stronger room security.~~
+- ~~observability.~~
+- ~~retention controls.~~
+- ~~operational support process.~~
+- ~~scalable SignalR deployment.~~
 
 ## Phase 5 — Template ecosystem
 
