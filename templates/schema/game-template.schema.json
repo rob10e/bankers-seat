@@ -88,6 +88,29 @@
         "minLength": 1,
         "maxLength": 50
       }
+    },
+    "license": {
+      "type": "string",
+      "description": "SPDX license identifier or 'Proprietary'",
+      "enum": [
+        "MIT", "Apache-2.0", "GPL-3.0", "GPL-2.0", "BSD-3-Clause", "BSD-2-Clause",
+        "CC0-1.0", "CC-BY-4.0", "CC-BY-SA-4.0", "ISC", "Unlicense", "Proprietary"
+      ]
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "authorEmail": {
+      "type": "string",
+      "format": "email",
+      "maxLength": 256
+    },
+    "authorUrl": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 500
     }
   },
   "$defs": {

@@ -152,88 +152,111 @@ public sealed class TemplateDiffResponse
 public sealed class ShareTemplateRequest
 {
     public required string[] RecipientEmails { get; set; }
-    public string? ExpiresInDays { get; set; }
 }
 
 public sealed class ShareTemplateResponse
 {
-    public bool Success { get; set; }
-    public string? Error { get; set; }
-    public string? ShareCode { get; set; }
-    public string? ShareUrl { get; set; }
-    public DateTime? ExpiresAtUtc { get; set; }
+    public required Guid[] ShareIds { get; set; }
+    public int SuccessCount { get; set; }
+    public string[]? Errors { get; set; }
 }
 
-public sealed class TemplateAccessInfo
+public sealed class TemplateShareListResponse
 {
-    public required Guid AccessId { get; set; }
+    public required TemplateShareItemResponse[] Shares { get; set; }
+}
+
+public sealed class TemplateShareItemResponse
+{
+    public required Guid ShareId { get; set; }
     public required string TemplateId { get; set; }
-    public required string AccessLevel { get; set; } // viewer, editor, owner
-    public required string GrantedBy { get; set; }
+    public required string SharedWithEmail { get; set; }
+    public required string SharedByName { get; set; }
     public required DateTime GrantedAtUtc { get; set; }
-    public DateTime? ExpiresAtUtc { get; set; }
+    public required bool IsActive { get; set; }
+}
+
+public sealed class SharedWithMeResponse
+{
+    public required SharedTemplateItemResponse[] Templates { get; set; }
+}
+
+public sealed class SharedTemplateItemResponse
+{
+    public required string TemplateId { get; set; }
+    public required string EditionId { get; set; }
+    public required string SharedByName { get; set; }
+    public required DateTime GrantedAtUtc { get; set; }
 }
 
 // Template Marketplace & Governance
 public sealed class PublishTemplateRequest
 {
     public required string TemplateId { get; set; }
-    public required string License { get; set; } // MIT, CC0, CC-BY, Custom, etc.
+    public required string EditionId { get; set; }
     public required string Author { get; set; }
-    public string? Repository { get; set; }
-    public string? SupportEmail { get; set; }
-    public string? Website { get; set; }
+    public string? AuthorEmail { get; set; }
+    public string? AuthorUrl { get; set; }
+    public required string License { get; set; } // MIT, CC-BY-4.0, CC0-1.0, Proprietary, etc.
 }
 
 public sealed class PublishTemplateResponse
 {
     public bool Success { get; set; }
     public string? Error { get; set; }
-    public string? PublishUrl { get; set; }
+    public Guid? MetadataId { get; set; }
 }
 
-public sealed class TemplateMetadataResponse
+public sealed class TemplateGovernanceInfoResponse
 {
+    public required Guid MetadataId { get; set; }
     public required string TemplateId { get; set; }
     public required string EditionId { get; set; }
-    public required string TemplateName { get; set; }
-    public required string License { get; set; }
     public required string Author { get; set; }
+    public string? AuthorEmail { get; set; }
+    public string? AuthorUrl { get; set; }
+    public required string License { get; set; }
     public required DateTime PublishedAtUtc { get; set; }
+    public required string TemplateStatus { get; set; }
+    public required string ModerationStatus { get; set; }
     public required int DownloadCount { get; set; }
-    public string? Repository { get; set; }
-    public string? SupportEmail { get; set; }
-    public string? Website { get; set; }
+    public string[]? FlagReasons { get; set; }
 }
 
 // Admin Governance
-public sealed class ModerationQueueItem
+public sealed class ModerationQueueItemResponse
 {
-    public required Guid Id { get; set; }
     public required string TemplateId { get; set; }
     public required string EditionId { get; set; }
-    public required string Status { get; set; } // pending, approved, rejected
     public required string Author { get; set; }
-    public required DateTime SubmittedAtUtc { get; set; }
-    public string? RejectionReason { get; set; }
-    public string? LicenseIssue { get; set; }
+    public required DateTime PublishedAtUtc { get; set; }
+    public required string ModerationStatus { get; set; }
+    public string[]? FlagReasons { get; set; }
 }
 
-public sealed class ApproveModerationRequest
+public sealed class ApproveTemplateRequest
 {
-    public required Guid ItemId { get; set; }
-    public string? Comment { get; set; }
+    public required string TemplateId { get; set; }
+    public required string EditionId { get; set; }
 }
 
-public sealed class RejectModerationRequest
+public sealed class RejectTemplateRequest
 {
-    public required Guid ItemId { get; set; }
+    public required string TemplateId { get; set; }
+    public required string EditionId { get; set; }
     public required string Reason { get; set; }
+}
+
+public sealed class FlagTemplateRequest
+{
+    public required string TemplateId { get; set; }
+    public required string EditionId { get; set; }
+    public required string[] Reasons { get; set; }
 }
 
 public sealed class ModerationQueueResponse
 {
-    public required ModerationQueueItem[] Items { get; set; }
+    public required ModerationQueueItemResponse[] Items { get; set; }
     public required int TotalCount { get; set; }
     public required int PendingCount { get; set; }
 }

@@ -74,6 +74,9 @@ builder.Services.AddSingleton<ITemplateCatalogService>(serviceProvider =>
     return new CachedTemplateCatalogService(fileService);
 });
 
+builder.Services.AddScoped<ITemplateShareService, TemplateShareService>();
+builder.Services.AddScoped<ITemplateGovernanceService, TemplateGovernanceService>();
+
 var databaseProvider = builder.Configuration.GetValue<string>("DatabaseProvider") ?? "Sqlite";
 
 builder.Services.AddDbContext<BankersSeatDbContext>(options =>

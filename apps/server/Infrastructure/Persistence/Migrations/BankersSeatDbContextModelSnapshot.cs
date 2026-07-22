@@ -557,6 +557,119 @@ namespace BankersSeat.Server.Infrastructure.Persistence.Migrations
 
                     b.ToTable("user_accounts", (string)null);
                 });
+
+            modelBuilder.Entity("BankersSeat.Server.Infrastructure.Persistence.Entities.TemplateShareEntity", b =>
+                {
+                   b.Property<Guid>("Id")
+                       .ValueGeneratedOnAdd()
+                       .HasColumnType("TEXT");
+
+                   b.Property<DateTime>("GrantedAtUtc")
+                       .HasColumnType("TEXT");
+
+                   b.Property<DateTime?>("RevokedAtUtc")
+                       .HasColumnType("TEXT");
+
+                   b.Property<Guid>("SharedByUserId")
+                       .HasColumnType("TEXT");
+
+                   b.Property<string>("SharedWithEmail")
+                       .IsRequired()
+                       .HasMaxLength(256)
+                       .HasColumnType("TEXT");
+
+                   b.Property<string>("TemplateId")
+                       .IsRequired()
+                       .HasMaxLength(100)
+                       .HasColumnType("TEXT");
+
+                   b.HasKey("Id");
+
+                   b.HasIndex("GrantedAtUtc");
+
+                   b.HasIndex("SharedByUserId");
+
+                   b.HasIndex("SharedWithEmail");
+
+                   b.HasIndex("TemplateId", "SharedWithEmail");
+
+                   b.ToTable("template_shares", (string)null);
+                });
+
+            modelBuilder.Entity("BankersSeat.Server.Infrastructure.Persistence.Entities.TemplateMetadataEntity", b =>
+                {
+                   b.Property<Guid>("Id")
+                       .ValueGeneratedOnAdd()
+                       .HasColumnType("TEXT");
+
+                   b.Property<string>("Author")
+                       .IsRequired()
+                       .HasMaxLength(200)
+                       .HasColumnType("TEXT");
+
+                   b.Property<string>("AuthorEmail")
+                       .HasMaxLength(256)
+                       .HasColumnType("TEXT");
+
+                   b.Property<string>("AuthorUrl")
+                       .HasMaxLength(500)
+                       .HasColumnType("TEXT");
+
+                   b.Property<int>("DownloadCount")
+                       .HasColumnType("INTEGER");
+
+                   b.Property<string>("EditionId")
+                       .IsRequired()
+                       .HasMaxLength(100)
+                       .HasColumnType("TEXT");
+
+                   b.Property<string>("FlagReasons")
+                       .HasColumnType("TEXT");
+
+                   b.Property<string>("License")
+                       .IsRequired()
+                       .HasMaxLength(50)
+                       .HasColumnType("TEXT");
+
+                   b.Property<string>("ModerationStatus")
+                       .IsRequired()
+                       .HasMaxLength(32)
+                       .HasColumnType("TEXT");
+
+                   b.Property<Guid>("OwnerUserId")
+                       .HasColumnType("TEXT");
+
+                   b.Property<DateTime>("PublishedAtUtc")
+                       .HasColumnType("TEXT");
+
+                   b.Property<string>("TemplateId")
+                       .IsRequired()
+                       .HasMaxLength(100)
+                       .HasColumnType("TEXT");
+
+                   b.Property<string>("TemplateStatus")
+                       .IsRequired()
+                       .HasMaxLength(32)
+                       .HasColumnType("TEXT");
+
+                   b.Property<DateTime>("UpdatedAtUtc")
+                       .HasColumnType("TEXT");
+
+                   b.HasKey("Id");
+
+                   b.HasIndex("ModerationStatus");
+
+                   b.HasIndex("OwnerUserId");
+
+                   b.HasIndex("TemplateStatus");
+
+                   b.HasIndex("TemplateId", "EditionId")
+                       .IsUnique();
+
+                   b.HasIndex("UpdatedAtUtc");
+
+                   b.ToTable("template_metadata", (string)null);
+                });
 #pragma warning restore 612, 618
         }
     }

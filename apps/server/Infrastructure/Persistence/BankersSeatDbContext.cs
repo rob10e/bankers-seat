@@ -36,6 +36,10 @@ public sealed class BankersSeatDbContext : DbContext
 
     public DbSet<SessionTtlPolicyEntity> SessionTtlPolicies => Set<SessionTtlPolicyEntity>();
 
+    public DbSet<TemplateShareEntity> TemplateShares => Set<TemplateShareEntity>();
+
+    public DbSet<TemplateMetadataEntity> TemplateMetadata => Set<TemplateMetadataEntity>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<GameSessionEntity>(entity =>
@@ -184,6 +188,41 @@ public sealed class BankersSeatDbContext : DbContext
             entity.HasKey(record => record.SessionId);
             entity.HasIndex(record => record.ExpiresAtUtc);
             entity.HasIndex(record => record.IsArchived);
+        });
+
+        modelBuilder.Entity<TemplateShareEntity>(entity =>
+        {
+            entity.ToTable("template_shares");
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.TemplateId).HasMaxLength(100).IsRequired();
+            entity.Property(record => record.SharedWithEmail).HasMaxLength(256).IsRequired();
+            entity.HasIndex(record => new { record.TemplateId, record.SharedWithEmail });
+            entity.HasIndex(record => record.SharedByUserId);
+            entity.HasIndex(record => record.SharedWithEmail);
+            entity.HasIndex(record => record.GrantedAtUtc);
+            // Unique constraint: only one active share per template per user
+            entity.HasIndex(record => new { record.TemplateId, record.SharedWithEmail, record.RevokedAtUtc })
+                .IsUnique()
+                .HasFilter("revoked_at_utc IS NULL");
+        });
+
+        modelBuilder.Entity<TemplateMetadataEntity>(entity =>
+        {
+            entity.ToTable("template_metadata");
+            entity.HasKey(record => record.Id);
+            entity.Property(record => record.TemplateId).HasMaxLength(100).IsRequired();
+            entity.Property(record => record.EditionId).HasMaxLength(100).IsRequired();
+            entity.Property(record => record.Author).HasMaxLength(200).IsRequired();
+            entity.Property(record => record.AuthorEmail).HasMaxLength(256);
+            entity.Property(record => record.AuthorUrl).HasMaxLength(500);
+            entity.Property(record => record.License).HasMaxLength(50).IsRequired();
+            entity.Property(record => record.TemplateStatus).HasMaxLength(32).IsRequired();
+            entity.Property(record => record.ModerationStatus).HasMaxLength(32).IsRequired();
+            entity.HasIndex(record => new { record.TemplateId, record.EditionId }).IsUnique();
+            entity.HasIndex(record => record.OwnerUserId);
+            entity.HasIndex(record => record.TemplateStatus);
+            entity.HasIndex(record => record.ModerationStatus);
+            entity.HasIndex(record => record.UpdatedAtUtc);
         });
     }
 }

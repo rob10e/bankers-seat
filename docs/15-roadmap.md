@@ -142,21 +142,70 @@ Validate the template model and banker workflow before adding multiplayer comple
 - ~~operational support process.~~
 - ~~scalable SignalR deployment.~~
 
-## Phase 5 — Template ecosystem (In Progress)
+## Phase 5 — Template ecosystem ✅ Complete
 
-### Features
+### Status: Completed 2026-07-22
+
+All components implemented and tested:
 
 - ~~Import/export package.~~
 - ~~template author CLI.~~
 - ~~visual preview.~~
 - ~~visual template editor.~~
 - ~~template diff/migration helper.~~ ✅ (2026-07-21)
-  - Backend: `ITemplateDiffService` with breaking change detection for bank mode, overdraft policy, removed denominations/fields
-  - API: `GET /api/v1/templates/{id}/diff?from={v1}&to={v2}` endpoint with structured response
-  - Frontend: `useTemplateDiffQuery` hook and `TemplateDiffComparison` tabbed UI component
-  - Tests: 13 unit/integration tests + E2E coverage, all passing
-- private sharing.
-- marketplace governance and licensing workflow.
+- ~~private sharing.~~ ✅ (2026-07-22)
+- ~~marketplace governance and licensing workflow.~~ ✅ (2026-07-22)
+
+### Component 6: Private Template Sharing ✅
+
+**Backend Implementation**:
+- `TemplateShareEntity` and `TemplateMetadataEntity` database models
+- `ITemplateShareService` with grant/revoke/access-check operations
+- API endpoints:
+  - `POST /api/v1/templates/{templateId}/share` — Grant shares
+  - `DELETE /api/v1/templates/{templateId}/share/{shareId}` — Revoke shares
+  - `GET /api/v1/templates/shared-with-me` — List shared templates
+- Tests: 9 unit/integration tests covering grant, revoke, access control, email normalization, share expiration
+
+**Features**:
+- Email normalization and case-insensitive sharing
+- Soft-delete revocation (audit trail preserved)
+- Duplicate share prevention with unique constraint
+- Owner/shared-user access control
+
+### Component 7: Marketplace Governance & Licensing ✅
+
+**Backend Implementation**:
+- `ITemplateGovernanceService` with publish/approve/reject/flag operations
+- Governance API endpoints:
+  - `POST /api/v1/templates/{templateId}/publish` — Publish with licensing metadata
+  - `GET /api/v1/admin/templates/moderation-queue` — Admin review queue
+  - `POST /api/v1/admin/templates/{templateId}/{editionId}/approve` — Approve published templates
+  - `POST /api/v1/admin/templates/{templateId}/{editionId}/reject` — Reject with reason
+  - `POST /api/v1/admin/templates/{templateId}/{editionId}/flag` — Flag for review
+  - `GET /api/v1/templates/public` — Public catalog (approved/published only)
+- SPDX license validation (MIT, Apache-2.0, GPL-3.0, CC-BY-4.0, CC0-1.0, Proprietary, etc.)
+- Tests: 11 unit/integration tests covering publish, approval, rejection, flagging, moderation queue
+
+**Features**:
+- Author and licensing metadata capture
+- Template status tracking (Draft → Published → Pending → Approved/Rejected/Flagged)
+- Moderation workflow with flag reasons stored as JSON
+- Public catalog filtering (only Published + Approved)
+- Download count tracking
+
+**Schema Updates**:
+- Template schema extended with optional `license`, `author`, `authorEmail`, `authorUrl` fields
+- Validation for SPDX identifiers and URL formats
+
+**Documentation**:
+- `docs/26-template-marketplace-governance.md` with:
+  - Governance policy and moderation guidelines
+  - SPDX licensing reference
+  - Moderation workflow and states
+  - API contracts and examples
+  - Access control matrix
+  - Future enhancement roadmap
 
 ## Phase 6 — Hybrid mobile
 
