@@ -1,0 +1,26 @@
+{
+  "name": "@bankers-seat/mobile",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"No lint configured for @bankers-seat/mobile\"",
+    "test": "echo \"No tests configured for @bankers-seat/mobile\"",
+    "sync": "cap sync",
+    "copy": "cap copy",
+    "open:android": "cap open android",
+    "open:ios": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/ios": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@capacitor/cli": "^8.4.2",
+    "typescript": "^5.9.2"
+  }
+}

@@ -1,6 +1,6 @@
 # Roadmap
 
-## Current delivery status (2026-07-21)
+## Current delivery status (2026-07-22)
 
 ### Phase 3 Complete ✅ (2026-07-21)
 
@@ -55,7 +55,7 @@
 
 ### Still pending in immediate roadmap
 
-- No immediate Phase 4 gaps. Phase 5 — Template Ecosystem ready to begin.
+- No immediate Phase 6 gaps. Phase 7 — Advanced enhancements ready to begin.
 
 ## Phase 0 — Foundation and validation
 
@@ -207,18 +207,32 @@ All components implemented and tested:
   - Access control matrix
   - Future enhancement roadmap
 
-## Phase 6 — Hybrid mobile
+## Phase 6 — Hybrid mobile ✅ Complete
+
+### Status: Completed 2026-07-22
+
+All components implemented and tested:
 
 ### Features
 
-- Capacitor shell.
-- native share.
-- QR scanner.
-- haptics.
-- secure credential storage.
-- deep links.
-- app-store packaging.
-- mobile crash reporting and update strategy.
+- ~~Capacitor shell.~~
+- ~~native share.~~
+- ~~QR scanner.~~
+- ~~haptics.~~
+- ~~secure credential storage.~~
+- ~~deep links.~~
+- ~~app-store packaging.~~
+- ~~mobile crash reporting and update strategy.~~
+
+### Delivered artifacts
+
+- Interface-first native adapter services in `packages/ui/src/services/native`.
+- 41 unit tests covering secure storage, haptics, sharing, QR scanning, deep links, network status, and crash reporting.
+- React integration hooks in `apps/web/src/hooks`.
+- Capacitor mobile workspace scaffold in `apps/mobile`.
+- Mobile automation scripts in `scripts/mobile`.
+- Deep-link-aware QR invite flow and `/join/:roomCode` routing support.
+- Phase 6 implementation guide in `docs/27-phase6-hybrid-mobile.md`.
 
 ## Phase 7 — Advanced enhancements
 

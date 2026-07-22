@@ -10,8 +10,9 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { deepLinkService } from "@bankers-seat/ui";
+import { useNavigate, useParams } from "react-router-dom";
 import { useUiSessionStore } from "../session/ui-session-store.ts";
 import { useJoinSessionMutation } from "../session/use-session-mutations.ts";
 import { QRScanner } from "./qr-scanner.tsx";
@@ -21,6 +22,7 @@ const normalizeRoomCode = (value: string): string => {
 };
 
 export function JoinRoomView() {
+  const { roomCode: routeRoomCode } = useParams<{ roomCode?: string }>();
   const navigate = useNavigate();
   const roomCodeDraft = useUiSessionStore((state) => state.roomCodeDraft);
   const setRoomCodeDraft = useUiSessionStore((state) => state.setRoomCodeDraft);
@@ -30,8 +32,16 @@ export function JoinRoomView() {
   const joinSessionMutation = useJoinSessionMutation();
   const [tabIndex, setTabIndex] = useState(0);
 
+  useEffect(() => {
+    if (routeRoomCode) {
+      setRoomCodeDraft(normalizeRoomCode(routeRoomCode));
+    }
+  }, [routeRoomCode, setRoomCodeDraft]);
+
   const handleScanComplete = (scannedCode: string) => {
-    const normalized = normalizeRoomCode(scannedCode);
+    const normalized =
+      deepLinkService.parseJoinLink(scannedCode)?.roomCode ??
+      normalizeRoomCode(scannedCode);
     setRoomCodeDraft(normalized);
     setTabIndex(0);
   };

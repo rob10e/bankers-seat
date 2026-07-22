@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { useEffect } from "react";
 import { getSessionUserId } from "./utils/session-storage.ts";
 import { AppShell } from "./app/app-shell.tsx";
@@ -9,6 +9,8 @@ import { JoinRoomView } from "./features/join/join-room-view.tsx";
 import { SettingsView } from "./features/settings/settings-view.tsx";
 import { TemplateCatalogView } from "./features/templates/template-catalog-view.tsx";
 import { TemplateEditorScreen } from "./features/templates/template-editor-screen.tsx";
+import { useUiSessionStore } from "./features/session/ui-session-store.ts";
+import { useCrashReporting, useDeepLink } from "./hooks/index.ts";
 import { InstallPrompt } from "./pwa/install-prompt.tsx";
 import { OfflineIndicator, UpdatePrompt } from "./pwa/offline-indicator.tsx";
 
@@ -29,10 +31,21 @@ function TemplateEditorRouteWrapper() {
 }
 
 export function App() {
+  const navigate = useNavigate();
+  const setRoomCodeDraft = useUiSessionStore((state) => state.setRoomCodeDraft);
+
   // Initialize session user ID on app load
   useEffect(() => {
     getSessionUserId();
   }, []);
+
+  useCrashReporting({ apiKey: "console" });
+  useDeepLink({
+    onJoinLink: (roomCode) => {
+      setRoomCodeDraft(roomCode);
+      navigate(`/join/${roomCode}`);
+    },
+  });
 
   return (
     <AppShell>
@@ -48,6 +61,7 @@ export function App() {
         />
         <Route path="/host/new" element={<HostSetupView />} />
         <Route path="/join" element={<JoinRoomView />} />
+        <Route path="/join/:roomCode" element={<JoinRoomView />} />
         <Route path="/game/:sessionId" element={<GameWorkspaceView />} />
         <Route path="/settings" element={<SettingsView />} />
         <Route path="*" element={<Navigate to="/" replace />} />
